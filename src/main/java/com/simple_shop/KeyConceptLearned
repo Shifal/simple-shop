@@ -1,0 +1,28 @@
+
+@RestController → makes it a REST API controller.
+
+@RequestMapping → sets base path.
+
+@GetMapping, @PostMapping, etc. → define HTTP methods.
+
+@RequestBody → automatically maps JSON → Java object.
+
+@PathVariable → extracts {id} from URL.
+
+ResponseEntity → allows you to set HTTP status and custom message.
+
+Optional + orElseThrow() → safely handle “not found” cases.
+
+
+
+| Method     | HTTP   | URL                   | Description              |
+| ---------- | ------ | --------------------- | ------------------------ |
+| `getAll()` | GET    | `/api/customers`      | Fetch all customers      |
+| `create()` | POST   | `/api/customers`      | Create new customer      |
+| `update()` | PUT    | `/api/customers/{id}` | Update existing customer |
+| `delete()` | DELETE | `/api/customers/{id}` | Delete customer by ID    |
+
+
+
+Getters and setters make your private data accessible safely.
+Spring Boot, Hibernate, and Jackson all depend on them for reading/writing values between your Java objects, database, and JSON data.
