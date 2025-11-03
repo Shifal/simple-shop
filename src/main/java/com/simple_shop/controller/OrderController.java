@@ -1,79 +1,105 @@
 package com.simple_shop.controller;
 
-import com.simple_shop.model.Order;
+import com.simple_shop.constants.ResponseMessages;
+import com.simple_shop.dto.OrderRequestDTO;
+import com.simple_shop.dto.OrderResponseDTO;
+import com.simple_shop.response.ApiResponse;
 import com.simple_shop.service.OrderService;
 import com.simple_shop.util.JwtUtil;
-import org.springframework.http.ResponseEntity;
+import lombok.RequiredArgsConstructor;
+import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
-@RestController                         // tells Spring this class handles REST API requests and automatically returns data as JSON.
-@RequestMapping("/api/orders")        //means every method in this controller will start with:
+@RestController
+@RequestMapping("/api/orders")
+@RequiredArgsConstructor
 public class OrderController {
 
-    private final OrderService orderService;        //contains the business logic for handling orders (fetching, saving, updating, deleting).
-    private final JwtUtil jwtUtil;                  //handles JWT (JSON Web Token) authentication — like extracting customer ID from the token, checking if a token is expired, etc.
-
-    public OrderController(OrderService orderService, JwtUtil jwtUtil) {
-        this.orderService = orderService;
-        this.jwtUtil = jwtUtil;
-    }
+    private final OrderService orderService;
+    private final JwtUtil jwtUtil;
 
     @GetMapping
-    public List<Order> getAllOrders() {
-        return orderService.getAllOrders();        // It uses the service layer (orderService.getAllOrders()) to get all orders from the database.
+    public ResponseEntity<ApiResponse> getAllOrders() {
+        List<OrderResponseDTO> orders = orderService.getAllOrders();
+        if (orders.isEmpty()) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(new ApiResponse(false, ResponseMessages.NO_ORDERS_FOUND, null));
+        }
+        return ResponseEntity.ok(new ApiResponse(true, ResponseMessages.ORDER_FETCH_SUCCESS, orders));
     }
 
     @GetMapping("/{id}")
-    public Order getOrder(@PathVariable Long id) {    // The {id} part is taken from the URL using @PathVariable.
-        return orderService.getOrderById(id)          // The controller calls the service method getOrderById(id):  If found → returns the order.
-                .orElseThrow(() -> new RuntimeException("Order not found"));     //If not found → throws RuntimeException("Order not found").
+    public ResponseEntity<ApiResponse> getOrder(@PathVariable Long id) {
+        return orderService.getOrderById(id)
+                .map(order -> ResponseEntity.ok(new ApiResponse(true, ResponseMessages.ORDER_FETCH_SUCCESS, order)))
+                .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(new ApiResponse(false, ResponseMessages.NO_ORDERS_FOUND, null)));
     }
 
     @PostMapping("/place/{customerId}")
-    public ResponseEntity<?> placeOrder(
+    public ResponseEntity<ApiResponse> placeOrder(
             @RequestHeader("Authorization") String token,
             @PathVariable Long customerId,
-            @RequestBody Order order) {
+            @RequestBody OrderRequestDTO requestDTO) {
 
-        token = token.replace("Bearer ", ""); // Removes "Bearer " to get the pure token string. clean token
-        Long tokenCustomerId = jwtUtil.extractCustomerId(token);  // This reads the customer ID encoded inside the JWT.
+        token = token.replace("Bearer ", "");
 
-        if (!tokenCustomerId.equals(customerId)) {   // If the token’s customer ID matches the one in the URL → proceed.
-            return ResponseEntity.status(403).body("You are not allowed to place order for another customer!");
-        }                                            //If not → return 403 Forbidden.
+        // Validate token here — this covers expired + malformed + signature issues
+        jwtUtil.validateToken(token, customerId);
 
-        if (jwtUtil.isTokenExpired(token)) {
-            return ResponseEntity.status(401).body("Token expired, please login again.");
-        }                                           //If token expired → return 401 Unauthorized.
-
-        Order placedOrder = orderService.placeOrder(customerId, order);
-        return ResponseEntity.ok(placedOrder);
+        return orderService.placeOrder(customerId, requestDTO)
+                .map(order -> ResponseEntity.ok(
+                        new ApiResponse(true, ResponseMessages.ORDER_CREATED, order)))
+                .orElse(ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(new ApiResponse(false, ResponseMessages.ORDER_CREATION_FAILED, null)));
     }
+
 
     @PutMapping("/update/{orderId}")
-    public ResponseEntity<?> updateOrder(
+    public ResponseEntity<ApiResponse> updateOrder(
             @RequestHeader("Authorization") String token,
             @PathVariable Long orderId,
-            @RequestBody Order order) {
+            @RequestBody OrderRequestDTO requestDTO) {
 
-        token = token.replace("Bearer ", ""); // remove prefix
+        token = token.replace("Bearer ", "");
         Long customerId = jwtUtil.extractCustomerId(token);
 
-        boolean canUpdate = orderService.isOrderOwnedByCustomer(orderId, customerId);
-
-        if (!canUpdate) {
-            return ResponseEntity.status(403).body("You are not allowed to update this order!");
+        if (!orderService.isOrderOwnedByCustomer(orderId, customerId)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(new ApiResponse(false, ResponseMessages.ORDER_ACCESS_DENIED, null));
         }
 
-        return orderService.updateOrder(orderId, order)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+        return orderService.updateOrder(orderId, requestDTO)
+                .map(order -> ResponseEntity.ok(new ApiResponse(true, ResponseMessages.ORDER_UPDATED, order)))
+                .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(new ApiResponse(false, ResponseMessages.NO_ORDERS_FOUND, null)));
     }
 
-    @DeleteMapping("/{id}")
-    public void deleteOrder(@PathVariable Long id) {
-        orderService.deleteOrder(id);
+    @DeleteMapping("/{orderId}")
+    public ResponseEntity<ApiResponse> deleteOrder(
+            @RequestHeader("Authorization") String token,
+            @PathVariable Long orderId) {
+
+        token = token.replace("Bearer ", "");
+        Long customerId = jwtUtil.extractCustomerId(token);
+
+        // Validate token (expired / malformed / invalid signature)
+        jwtUtil.validateToken(token, customerId);
+
+        // Check if order belongs to this customer
+        if (!orderService.isOrderOwnedByCustomer(orderId, customerId)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(new ApiResponse(false, ResponseMessages.ORDER_ACCESS_DENIED, null));
+        }
+
+        boolean deleted = orderService.deleteOrder(orderId);
+        if (!deleted) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(new ApiResponse(false, ResponseMessages.NO_ORDERS_FOUND, null));
+        }
+
+        return ResponseEntity.ok(new ApiResponse(true, ResponseMessages.ORDER_DELETED, null));
     }
 }

@@ -1,80 +1,62 @@
 package com.simple_shop.service;
 
+import com.simple_shop.constants.ResponseMessages;
+import com.simple_shop.dto.OrderRequestDTO;
+import com.simple_shop.dto.OrderResponseDTO;
+import com.simple_shop.mapper.OrderMapper;
 import com.simple_shop.model.Customer;
 import com.simple_shop.model.Order;
 import com.simple_shop.repository.CustomerRepository;
 import com.simple_shop.repository.OrderRepository;
+import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
+@RequiredArgsConstructor
 public class OrderService {
 
     private final OrderRepository orderRepo;
     private final CustomerRepository customerRepo;
 
-    public OrderService(OrderRepository orderRepo, CustomerRepository customerRepo) {
-        this.orderRepo = orderRepo;
-        this.customerRepo = customerRepo;
+    public List<OrderResponseDTO> getAllOrders() {
+        return orderRepo.findAll()
+                .stream()
+                .map(OrderMapper::toDTO)
+                .collect(Collectors.toList());
     }
 
-    public List<Order> getAllOrders() {
-        return orderRepo.findAll();
+    public Optional<OrderResponseDTO> getOrderById(Long id) {
+        return orderRepo.findById(id).map(OrderMapper::toDTO);
     }
 
-    public Order placeOrder(Long customerId, Order order) {
-        Customer customer = customerRepo.findById(customerId)
-                .orElseThrow(() -> new RuntimeException("Customer not found"));
-        order.setCustomer(customer);
-        order.setStatus("CREATED");
-        orderRepo.save(order);
-
-        new Thread(() -> {
-            try {
-                Thread.sleep(3000);
-                order.setStatus("PROCESSING");
-                orderRepo.save(order);
-                Thread.sleep(3000);
-                order.setStatus("COMPLETED");
-                orderRepo.save(order);
-            } catch (InterruptedException ignored) {}
-        }).start();
-
-        return order;
-    }
-
-    public Optional<Order> updateOrder(Long orderId, Order updatedOrder) {
-        return orderRepo.findById(orderId).map(existingOrder -> {
-            // update fields
-            existingOrder.setProduct(updatedOrder.getProduct());
-            existingOrder.setQuantity(updatedOrder.getQuantity());
-            existingOrder.setStatus("UPDATED");
-
-            orderRepo.save(existingOrder);
-
-            new Thread(() -> {
-                try {
-                    Thread.sleep(3000);
-                    existingOrder.setStatus("PROCESSING");
-                    orderRepo.save(existingOrder);
-                    Thread.sleep(3000);
-                    existingOrder.setStatus("COMPLETED");
-                    orderRepo.save(existingOrder);
-                } catch (InterruptedException ignored) {}
-            }).start();
-
-            return existingOrder;
+    public Optional<OrderResponseDTO> placeOrder(Long customerId, OrderRequestDTO requestDTO) {
+        return customerRepo.findById(customerId).map(customer -> {
+            Order order = OrderMapper.toEntity(requestDTO, customer);
+            orderRepo.save(order);
+            return OrderMapper.toDTO(order);
         });
     }
 
-    public Optional<Order> getOrderById(Long id) {
-        return orderRepo.findById(id);
+    public Optional<OrderResponseDTO> updateOrder(Long orderId, OrderRequestDTO dto) {
+        return orderRepo.findById(orderId).map(existingOrder -> {
+            existingOrder.setProduct(dto.getProduct());
+            existingOrder.setQuantity(dto.getQuantity());
+            existingOrder.setStatus("UPDATED");
+            orderRepo.save(existingOrder);
+            return OrderMapper.toDTO(existingOrder);
+        });
     }
 
-    public void deleteOrder(Long id) {
+    public boolean deleteOrder(Long id) {
+        if (!orderRepo.existsById(id)) {
+            return false;
+        }
         orderRepo.deleteById(id);
+        return true;
     }
 
     public boolean isOrderOwnedByCustomer(Long orderId, Long customerId) {

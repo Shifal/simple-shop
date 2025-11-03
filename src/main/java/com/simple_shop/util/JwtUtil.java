@@ -1,5 +1,7 @@
 package com.simple_shop.util;
 
+import com.simple_shop.constants.ResponseMessages;
+import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.Claims;
@@ -42,7 +44,27 @@ public class JwtUtil {
     }
 
     public boolean validateToken(String token, Long customerId) {
-        Long extractedId = extractCustomerId(token);
-        return (extractedId.equals(customerId) && !isTokenExpired(token));
+        try {
+            Long extractedId = extractCustomerId(token);
+
+            if (!extractedId.equals(customerId)) {
+                throw new JwtException("Token does not belong to this user.");
+            }
+
+            if (isTokenExpired(token)) {
+                throw new JwtException(ResponseMessages.TOKEN_EXPIRED);
+            }
+
+            return true;
+
+        } catch (io.jsonwebtoken.ExpiredJwtException e) {
+            throw new JwtException(ResponseMessages.TOKEN_EXPIRED);
+        } catch (io.jsonwebtoken.SignatureException | io.jsonwebtoken.MalformedJwtException e) {
+            throw new JwtException("Invalid JWT signature or malformed token.");
+        } catch (Exception e) {
+            throw new JwtException("Invalid or corrupted token.");
+        }
     }
+
+
 }

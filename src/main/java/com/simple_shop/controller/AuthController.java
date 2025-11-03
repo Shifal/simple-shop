@@ -25,22 +25,35 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<ApiResponse> login(@RequestBody Customer loginRequest) {
+        // Validate empty or null fields
+        if (loginRequest.getEmail() == null || loginRequest.getEmail().isBlank()
+                || loginRequest.getPassword() == null || loginRequest.getPassword().isBlank()) {
+            return ResponseEntity
+                    .status(HttpStatus.BAD_REQUEST)
+                    .body(new ApiResponse(false, ResponseMessages.INVALID_CREDENTIALS, null));
+        }
+
         Optional<Customer> customerOpt = customerRepo.findByEmail(loginRequest.getEmail());
-        if (customerOpt.isPresent()) {
-            Customer customer = customerOpt.get();
-            if (customer.getPassword().equals(loginRequest.getPassword())) {
-                String token = jwtUtil.generateToken(customer.getId());
-                return ResponseEntity
-                        .status(HttpStatus.OK)
-                        .body(new ApiResponse(true, ResponseMessages.LOGIN_SUCCESS, token));
-            }
+
+        if (customerOpt.isEmpty()) {
+            return ResponseEntity
+                    .status(HttpStatus.NOT_FOUND)
+                    .body(new ApiResponse(false, ResponseMessages.USER_NOT_FOUND, null));
+        }
+
+        Customer customer = customerOpt.get();
+
+        if (!customer.getPassword().equals(loginRequest.getPassword())) {
             return ResponseEntity
                     .status(HttpStatus.UNAUTHORIZED)
                     .body(new ApiResponse(false, ResponseMessages.INVALID_PASSWORD, null));
         }
+
+        String token = jwtUtil.generateToken(customer.getId());
+
         return ResponseEntity
-                .status(HttpStatus.NOT_FOUND)
-                .body(new ApiResponse(false, ResponseMessages.USER_NOT_FOUND, null));
+                .status(HttpStatus.OK)
+                .body(new ApiResponse(true, ResponseMessages.LOGIN_SUCCESS, token));
     }
 
     @PostMapping("/logout")
