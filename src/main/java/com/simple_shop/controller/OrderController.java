@@ -1,13 +1,12 @@
-package com.simple_shop.Controller;
+package com.simple_shop.controller;
 
-import com.simple_shop.Model.Order;
+import com.simple_shop.model.Order;
 import com.simple_shop.service.OrderService;
 import com.simple_shop.util.JwtUtil;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
-import java.util.Optional;
 
 @RestController                         // tells Spring this class handles REST API requests and automatically returns data as JSON.
 @RequestMapping("/api/orders")        //means every method in this controller will start with:

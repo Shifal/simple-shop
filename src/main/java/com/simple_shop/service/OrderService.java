@@ -1,7 +1,7 @@
 package com.simple_shop.service;
 
-import com.simple_shop.Model.Customer;
-import com.simple_shop.Model.Order;
+import com.simple_shop.model.Customer;
+import com.simple_shop.model.Order;
 import com.simple_shop.repository.CustomerRepository;
 import com.simple_shop.repository.OrderRepository;
 import org.springframework.stereotype.Service;
