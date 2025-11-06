@@ -9,6 +9,7 @@ public class CustomerMapper {
         if (customer == null) return null;
         CustomerDTO dto = new CustomerDTO();
         dto.setId(customer.getId());
+        dto.setCustomerId(customer.getCustomerId());
         dto.setName(customer.getName());
         dto.setEmail(customer.getEmail());
         return dto;
@@ -18,6 +19,7 @@ public class CustomerMapper {
         if (dto == null) return null;
         Customer customer = new Customer();
         customer.setId(dto.getId());
+        customer.setCustomerId(dto.getCustomerId());
         customer.setName(dto.getName());
         customer.setEmail(dto.getEmail());
         return customer;

@@ -41,10 +41,11 @@ public class OrderController {
     @PostMapping("/place/{customerId}")
     public ResponseEntity<ApiResponse> placeOrder(
             @RequestHeader("Authorization") String token,
-            @PathVariable Long customerId,
+            @PathVariable String customerId,
             @RequestBody OrderRequestDTO requestDTO) {
 
         token = token.replace("Bearer ", "");
+        System.out.println("my Tokennnnnnn"  + token  + customerId);
 
         // Validate token here — this covers expired + malformed + signature issues
         jwtUtil.validateToken(token, customerId);
@@ -64,7 +65,7 @@ public class OrderController {
             @RequestBody OrderRequestDTO requestDTO) {
 
         token = token.replace("Bearer ", "");
-        Long customerId = jwtUtil.extractCustomerId(token);
+        String customerId = jwtUtil.extractCustomerId(token);
 
         if (!orderService.isOrderOwnedByCustomer(orderId, customerId)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
@@ -83,7 +84,7 @@ public class OrderController {
             @PathVariable Long orderId) {
 
         token = token.replace("Bearer ", "");
-        Long customerId = jwtUtil.extractCustomerId(token);
+        String customerId = jwtUtil.extractCustomerId(token);
 
         // Validate token (expired / malformed / invalid signature)
         jwtUtil.validateToken(token, customerId);

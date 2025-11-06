@@ -25,7 +25,6 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<ApiResponse> login(@RequestBody Customer loginRequest) {
-        // Validate empty or null fields
         if (loginRequest.getEmail() == null || loginRequest.getEmail().isBlank()
                 || loginRequest.getPassword() == null || loginRequest.getPassword().isBlank()) {
             return ResponseEntity
@@ -49,7 +48,7 @@ public class AuthController {
                     .body(new ApiResponse(false, ResponseMessages.INVALID_PASSWORD, null));
         }
 
-        String token = jwtUtil.generateToken(customer.getId());
+        String token = jwtUtil.generateToken(customer.getCustomerId());
 
         return ResponseEntity
                 .status(HttpStatus.OK)

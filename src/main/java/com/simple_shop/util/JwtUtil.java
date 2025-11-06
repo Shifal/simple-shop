@@ -16,22 +16,22 @@ public class JwtUtil {
     private static final String SECRET_KEY = "ShifalSecretKey123ShifalSecretKey123";
     private static final Key KEY = Keys.hmacShaKeyFor(SECRET_KEY.getBytes());
 
-    public String generateToken(Long customerId) {
+    public String generateToken(String customerId) {
         return Jwts.builder()
-                .setSubject(String.valueOf(customerId))
+                .setSubject(customerId)
                 .setIssuedAt(new Date())
                 .setExpiration(new Date(System.currentTimeMillis() + 1000 * 60 * 60)) // 1 hour
                 .signWith(KEY, SignatureAlgorithm.HS256)
                 .compact();
     }
 
-    public Long extractCustomerId(String token) {
+    public String extractCustomerId(String token) {
         Claims claims = Jwts.parserBuilder()
                 .setSigningKey(KEY)
                 .build()
                 .parseClaimsJws(token)
                 .getBody();
-        return Long.parseLong(claims.getSubject());
+        return claims.getSubject();
     }
 
     public boolean isTokenExpired(String token) {
@@ -43,9 +43,10 @@ public class JwtUtil {
         return claims.getExpiration().before(new Date());
     }
 
-    public boolean validateToken(String token, Long customerId) {
+    public boolean validateToken(String token, String customerId) {
         try {
-            Long extractedId = extractCustomerId(token);
+            System.out.println("validateToken :  " + token + " " + customerId);
+            String extractedId = extractCustomerId(token);
 
             if (!extractedId.equals(customerId)) {
                 throw new JwtException("Token does not belong to this user.");

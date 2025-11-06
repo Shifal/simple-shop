@@ -4,9 +4,12 @@ import com.simple_shop.dto.CustomerDTO;
 import com.simple_shop.mapper.CustomerMapper;
 import com.simple_shop.model.Customer;
 import com.simple_shop.repository.CustomerRepository;
+import jakarta.persistence.EntityManager;
+import jakarta.transaction.Transactional;
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
 import java.util.stream.Collectors;
@@ -15,9 +18,11 @@ import java.util.stream.Collectors;
 public class CustomerService {
 
     private final CustomerRepository customerRepo;
+    private final EntityManager entityManager;
 
-    public CustomerService(CustomerRepository customerRepo) {
+    public CustomerService(CustomerRepository customerRepo, EntityManager entityManager) {
         this.customerRepo = customerRepo;
+        this.entityManager = entityManager;
     }
 
     // Get all customers
@@ -28,34 +33,55 @@ public class CustomerService {
                 .collect(Collectors.toList());
     }
 
-    // Create a new customer - return Optional.empty() if creation fails
+    // Create customer
+    @Transactional
     public Optional<CustomerDTO> createCustomer(Customer customer) {
         try {
+            Long nextVal = ((Number) entityManager
+                    .createNativeQuery("SELECT nextval('customer_seq')")
+                    .getSingleResult()).longValue();
+
+            String prefix = "CUS-" + LocalDate.now().toString().replace("-", "");
+            String formattedNumber = String.format("%04d", nextVal);
+            String generatedCustomerId = prefix + "-" + formattedNumber;
+
+            customer.setCustomerId(generatedCustomerId);
+
             Customer saved = customerRepo.save(customer);
-            return Optional.ofNullable(CustomerMapper.toDTO(saved));
+
+            return Optional.of(CustomerMapper.toDTO(saved));
         } catch (DataAccessException | IllegalArgumentException ex) {
-            // log.error("Error creating customer", ex);  // add logger if needed
+            ex.printStackTrace();
             return Optional.empty();
         }
     }
 
-    // Update existing customer
-    public Optional<CustomerDTO> updateCustomer(Long id, Customer updated) {
-        return customerRepo.findById(id)
+    // Update customer by customerId
+    @Transactional
+    public Optional<CustomerDTO> updateCustomer(String customerId, Customer updated) {
+        return customerRepo.findByCustomerId(customerId)
                 .map(existing -> {
                     existing.setName(updated.getName());
                     existing.setEmail(updated.getEmail());
+                    existing.setPassword(updated.getPassword());
                     Customer saved = customerRepo.save(existing);
                     return CustomerMapper.toDTO(saved);
                 });
     }
 
-    // Delete a customer
-    public boolean deleteCustomer(Long id) {
-        if (!customerRepo.existsById(id)) {
+    // Delete customer by customerId
+    @Transactional
+    public boolean deleteCustomer(String customerId) {
+        if (!customerRepo.existsByCustomerId(customerId)) {
             return false;
         }
-        customerRepo.deleteById(id);
+        customerRepo.deleteByCustomerId(customerId);
         return true;
+    }
+
+    // Get customer by customerId
+    public Optional<CustomerDTO> getCustomerByCustomerId(String customerId) {
+        return customerRepo.findByCustomerId(customerId)
+                .map(CustomerMapper::toDTO);
     }
 }

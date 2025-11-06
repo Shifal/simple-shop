@@ -14,7 +14,10 @@ public class Customer {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;        // Primary Key
+    private Long id;
+
+    @Column(name = "customer_id", unique = true, nullable = false, updatable = false)
+    private String customerId;
 
     private String name;
     private String email;

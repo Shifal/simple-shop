@@ -1,10 +1,8 @@
 package com.simple_shop.service;
 
-import com.simple_shop.constants.ResponseMessages;
 import com.simple_shop.dto.OrderRequestDTO;
 import com.simple_shop.dto.OrderResponseDTO;
 import com.simple_shop.mapper.OrderMapper;
-import com.simple_shop.model.Customer;
 import com.simple_shop.model.Order;
 import com.simple_shop.repository.CustomerRepository;
 import com.simple_shop.repository.OrderRepository;
@@ -33,8 +31,8 @@ public class OrderService {
         return orderRepo.findById(id).map(OrderMapper::toDTO);
     }
 
-    public Optional<OrderResponseDTO> placeOrder(Long customerId, OrderRequestDTO requestDTO) {
-        return customerRepo.findById(customerId).map(customer -> {
+    public Optional<OrderResponseDTO> placeOrder(String customerId, OrderRequestDTO requestDTO) {
+        return customerRepo.findByCustomerId(customerId).map(customer -> {
             Order order = OrderMapper.toEntity(requestDTO, customer);
             orderRepo.save(order);
             return OrderMapper.toDTO(order);
@@ -59,9 +57,8 @@ public class OrderService {
         return true;
     }
 
-    public boolean isOrderOwnedByCustomer(Long orderId, Long customerId) {
-        return orderRepo.findById(orderId)
-                .map(order -> order.getCustomer().getId().equals(customerId))
-                .orElse(false);
+    public boolean isOrderOwnedByCustomer(Long orderId, String customerId) {
+        return orderRepo.existsByIdAndCustomer_CustomerId(orderId, customerId);
     }
+
 }
