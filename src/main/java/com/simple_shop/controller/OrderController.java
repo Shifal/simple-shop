@@ -5,6 +5,7 @@ import com.simple_shop.dto.OrderRequestDTO;
 import com.simple_shop.dto.OrderResponseDTO;
 import com.simple_shop.response.ApiResponse;
 import com.simple_shop.service.OrderService;
+import com.simple_shop.service.RoleService;
 import com.simple_shop.util.JwtUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.*;
@@ -19,15 +20,29 @@ public class OrderController {
 
     private final OrderService orderService;
     private final JwtUtil jwtUtil;
+    private final RoleService roleService;
+
 
     @GetMapping
-    public ResponseEntity<ApiResponse> getAllOrders() {
-        List<OrderResponseDTO> orders = orderService.getAllOrders();
-        if (orders.isEmpty()) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(new ApiResponse(false, ResponseMessages.NO_ORDERS_FOUND, null));
+    public ResponseEntity<ApiResponse> getAllOrders(@RequestHeader("Authorization") String token) {
+        try {
+            token = token.replace("Bearer ", "");
+            String requesterId = jwtUtil.extractCustomerId(token);
+
+            if (!roleService.isAdmin(requesterId)) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body(new ApiResponse(false, ResponseMessages.ACCESS_DENIED_ADMIN_ONLY, null));
+            }
+            List<OrderResponseDTO> orders = orderService.getAllOrders();
+            if (orders.isEmpty()) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(new ApiResponse(false, ResponseMessages.NO_ORDERS_FOUND, null));
+            }
+            return ResponseEntity.ok(new ApiResponse(true, ResponseMessages.ORDER_FETCH_SUCCESS, orders));
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new ApiResponse(false, ResponseMessages.TOKEN_EXPIRED, null));
         }
-        return ResponseEntity.ok(new ApiResponse(true, ResponseMessages.ORDER_FETCH_SUCCESS, orders));
     }
 
     @GetMapping("/{id}")

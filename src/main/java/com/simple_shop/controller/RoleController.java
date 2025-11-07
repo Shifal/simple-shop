@@ -2,7 +2,6 @@ package com.simple_shop.controller;
 
 import com.simple_shop.constants.ResponseMessages;
 import com.simple_shop.model.Customer;
-import com.simple_shop.model.Role;
 import com.simple_shop.response.ApiResponse;
 import com.simple_shop.service.CustomerService;
 import com.simple_shop.service.RoleService;
