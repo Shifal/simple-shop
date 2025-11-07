@@ -3,6 +3,7 @@ package com.simple_shop.service;
 import com.simple_shop.dto.CustomerDTO;
 import com.simple_shop.mapper.CustomerMapper;
 import com.simple_shop.model.Customer;
+import com.simple_shop.model.Role;
 import com.simple_shop.repository.CustomerRepository;
 import jakarta.persistence.EntityManager;
 import jakarta.transaction.Transactional;
@@ -19,10 +20,12 @@ public class CustomerService {
 
     private final CustomerRepository customerRepo;
     private final EntityManager entityManager;
+    private final RoleService roleService;
 
-    public CustomerService(CustomerRepository customerRepo, EntityManager entityManager) {
+    public CustomerService(CustomerRepository customerRepo, EntityManager entityManager, RoleService roleService) {
         this.customerRepo = customerRepo;
         this.entityManager = entityManager;
+        this.roleService = roleService;
     }
 
     // Get all customers
@@ -48,6 +51,7 @@ public class CustomerService {
             customer.setCustomerId(generatedCustomerId);
 
             Customer saved = customerRepo.save(customer);
+            roleService.assignDefaultRole(saved);
 
             return Optional.of(CustomerMapper.toDTO(saved));
         } catch (DataAccessException | IllegalArgumentException ex) {
@@ -84,4 +88,35 @@ public class CustomerService {
         return customerRepo.findByCustomerId(customerId)
                 .map(CustomerMapper::toDTO);
     }
+
+    @Transactional
+    public Optional<CustomerDTO> createAdminCustomer(Customer customer) {
+        try {
+            Long nextVal = ((Number) entityManager
+                    .createNativeQuery("SELECT nextval('customer_seq')")
+                    .getSingleResult()).longValue();
+
+            String prefix = "CUS-" + LocalDate.now().toString().replace("-", "");
+            String formattedNumber = String.format("%04d", nextVal);
+            String generatedCustomerId = prefix + "-" + formattedNumber;
+
+            customer.setCustomerId(generatedCustomerId);
+
+            // Save the customer
+            Customer saved = customerRepo.save(customer);
+
+            // Assign admin role explicitly
+            Role adminRole = new Role();
+            adminRole.setRoleName("ADMIN");
+            adminRole.setCustomer(saved);
+            entityManager.persist(adminRole);
+
+            return Optional.of(CustomerMapper.toDTO(saved));
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return Optional.empty();
+        }
+    }
+
 }

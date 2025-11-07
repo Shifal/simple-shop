@@ -5,6 +5,8 @@ import com.simple_shop.dto.CustomerDTO;
 import com.simple_shop.model.Customer;
 import com.simple_shop.response.ApiResponse;
 import com.simple_shop.service.CustomerService;
+import com.simple_shop.service.RoleService;
+import com.simple_shop.util.JwtUtil;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -16,19 +18,39 @@ import java.util.List;
 public class CustomerController {
 
     private final CustomerService customerService;
+    private final RoleService roleService;
+    private final JwtUtil jwtUtil;
 
-    public CustomerController(CustomerService customerService) {
+    public CustomerController(CustomerService customerService, RoleService roleService, JwtUtil jwtUtil) {
         this.customerService = customerService;
+        this.roleService = roleService;
+        this.jwtUtil = jwtUtil;
     }
 
     // Get all customers
+    // Only ADMIN can get all customers
     @GetMapping
-    public ResponseEntity<ApiResponse> getAll() {
-        List<CustomerDTO> customers = customerService.getAllCustomers();
-        if (customers.isEmpty()) {
-            return ResponseEntity.ok(new ApiResponse(true, ResponseMessages.NO_CUSTOMERS_FOUND, customers));
+    public ResponseEntity<ApiResponse> getAll(@RequestHeader("Authorization") String token) {
+        try {
+            token = token.replace("Bearer ", "");
+            String requesterId = jwtUtil.extractCustomerId(token);
+
+            if (!roleService.isAdmin(requesterId)) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body(new ApiResponse(false, ResponseMessages.ACCESS_DENIED_ADMIN_ONLY, null));
+            }
+
+            List<CustomerDTO> customers = customerService.getAllCustomers();
+            if (customers.isEmpty()) {
+                return ResponseEntity.ok(new ApiResponse(true, ResponseMessages.NO_CUSTOMERS_FOUND, customers));
+            }
+
+            return ResponseEntity.ok(new ApiResponse(true, ResponseMessages.FETCH_SUCCESS, customers));
+
+        } catch (Exception e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new ApiResponse(false, ResponseMessages.TOKEN_EXPIRED, null));
         }
-        return ResponseEntity.ok(new ApiResponse(true, ResponseMessages.FETCH_SUCCESS, customers));
     }
 
     // Get a single customer by customerId

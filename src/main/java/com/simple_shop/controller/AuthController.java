@@ -24,7 +24,9 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<ApiResponse> login(@RequestBody Customer loginRequest) {
+    public ResponseEntity<ApiResponse> login(
+            @RequestBody Customer loginRequest
+    ) {
         if (loginRequest.getEmail() == null || loginRequest.getEmail().isBlank()
                 || loginRequest.getPassword() == null || loginRequest.getPassword().isBlank()) {
             return ResponseEntity

@@ -13,7 +13,6 @@ public class ResponseMessages {
     public static final String NO_CUSTOMERS_FOUND = "No customers found.";
     public static final String CUSTOMER_NOT_FOUND = "Customer not found.";
 
-
     public static final String ORDER_CREATED = "Order placed successfully.";
     public static final String ORDER_UPDATED = "Order updated successfully.";
     public static final String ORDER_DELETED = "Order deleted successfully.";
@@ -32,4 +31,15 @@ public class ResponseMessages {
     public static final String ORDER_CREATION_FAILED = "Failed to create order.";
     public static final String ORDER_ACCESS_DENIED = "You are not allowed to modify this order.";
     public static final String TOKEN_EXPIRED = "Token expired. Please login again.";
+
+    // Added new Role/Admin success messages
+    public static final String ADMIN_CREATED = "New ADMIN created successfully.";
+    public static final String ADMIN_PROMOTED = "Customer promoted to ADMIN successfully.";
+    public static final String ROLE_FETCH_SUCCESS = "Role fetched successfully.";
+
+    // Added new Role/Admin error messages
+    public static final String ADMIN_CREATION_FAILED = "Failed to create ADMIN.";
+    public static final String ADMIN_PROMOTION_FAILED = "Customer not found or already ADMIN.";
+    public static final String ROLE_NOT_FOUND = "Role not found.";
+    public static final String ACCESS_DENIED_ADMIN_ONLY = "Access denied: Only ADMIN can perform this action.";
 }
