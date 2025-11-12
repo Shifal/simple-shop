@@ -15,7 +15,7 @@ import java.util.List;
 
 @RestController
 @RequestMapping("/api/orders")
-@RequiredArgsConstructor
+@RequiredArgsConstructor // Automatically injects dependencies (no need for @Autowired).
 public class OrderController {
 
     private final OrderService orderService;

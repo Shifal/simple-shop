@@ -1,7 +1,7 @@
 package com.simple_shop.repository;
 
 import com.simple_shop.model.Role;
-import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.JpaRepository; //providing database operations without writing SQL.
 
 import java.util.Optional;
 

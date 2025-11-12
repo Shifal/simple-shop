@@ -4,9 +4,9 @@ import com.simple_shop.constants.ResponseMessages;
 import io.jsonwebtoken.JwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
-import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.Claims; // Represents the payload part of the JWT (data like subject, issue time, expiry, etc.)
 import io.jsonwebtoken.security.Keys;
-import java.security.Key;
+import java.security.Key; //Used to generate a cryptographic signing key.
 import java.util.Date;
 import org.springframework.stereotype.Component;
 

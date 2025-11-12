@@ -5,8 +5,8 @@ import com.simple_shop.mapper.CustomerMapper;
 import com.simple_shop.model.Customer;
 import com.simple_shop.model.Role;
 import com.simple_shop.repository.CustomerRepository;
-import jakarta.persistence.EntityManager;
-import jakarta.transaction.Transactional;
+import jakarta.persistence.EntityManager; // is used here mainly for custom sequence generation and manual role insertions.
+import jakarta.transaction.Transactional; // ensures atomic operations (all or nothing).
 import org.springframework.dao.DataAccessException;
 import org.springframework.stereotype.Service;
 
@@ -89,7 +89,7 @@ public class CustomerService {
                 .map(CustomerMapper::toDTO);
     }
 
-    @Transactional
+    @Transactional // If any part fails (e.g., DB insert, role creation), the entire operation rolls back automatically.
     public Optional<CustomerDTO> createAdminCustomer(Customer customer) {
         try {
             Long nextVal = ((Number) entityManager

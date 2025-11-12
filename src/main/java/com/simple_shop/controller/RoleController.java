@@ -10,7 +10,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-@RestController
+@RestController  // This class will handle API requests and return JSON responses.
 @RequestMapping("/api/roles")
 public class RoleController {
 

@@ -1,6 +1,6 @@
 package com.simple_shop.dto;
 
-import lombok.Data;
+import lombok.Data; //don’t have to manually write getters/setters
 
 @Data
 public class CustomerDTO {
