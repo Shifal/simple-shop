@@ -7,6 +7,7 @@ import com.simple_shop.response.ApiResponse;
 import com.simple_shop.service.OrderService;
 import com.simple_shop.service.RoleService;
 import com.simple_shop.util.JwtUtil;
+import io.jsonwebtoken.JwtException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.*;
 import org.springframework.web.bind.annotation.*;
@@ -60,7 +61,7 @@ public class OrderController {
             @RequestBody OrderRequestDTO requestDTO) {
 
         token = token.replace("Bearer ", "");
-        System.out.println("my Tokennnnnnn"  + token  + customerId);
+        System.out.println("my Tokennnnnnn" + token + customerId);
 
         // Validate token here — this covers expired + malformed + signature issues
         jwtUtil.validateToken(token, customerId);
@@ -97,25 +98,29 @@ public class OrderController {
     public ResponseEntity<ApiResponse> deleteOrder(
             @RequestHeader("Authorization") String token,
             @PathVariable Long orderId) {
+        try {
+            token = token.replace("Bearer ", "");
+            String customerId = jwtUtil.extractCustomerId(token);
 
-        token = token.replace("Bearer ", "");
-        String customerId = jwtUtil.extractCustomerId(token);
+            // Validate token (expired / malformed / invalid signature)
+            jwtUtil.validateToken(token, customerId);
 
-        // Validate token (expired / malformed / invalid signature)
-        jwtUtil.validateToken(token, customerId);
+            // Check if order belongs to this customer
+            if (!orderService.isOrderOwnedByCustomer(orderId, customerId)) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body(new ApiResponse(false, ResponseMessages.ORDER_ACCESS_DENIED, null));
+            }
 
-        // Check if order belongs to this customer
-        if (!orderService.isOrderOwnedByCustomer(orderId, customerId)) {
-            return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                    .body(new ApiResponse(false, ResponseMessages.ORDER_ACCESS_DENIED, null));
+            boolean deleted = orderService.deleteOrder(orderId);
+            if (!deleted) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(new ApiResponse(false, ResponseMessages.NO_ORDERS_FOUND, null));
+            }
+
+            return ResponseEntity.ok(new ApiResponse(true, ResponseMessages.ORDER_DELETED, null));
+        } catch (JwtException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(new ApiResponse(false, ResponseMessages.TOKEN_EXPIRED, null));
         }
-
-        boolean deleted = orderService.deleteOrder(orderId);
-        if (!deleted) {
-            return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(new ApiResponse(false, ResponseMessages.NO_ORDERS_FOUND, null));
-        }
-
-        return ResponseEntity.ok(new ApiResponse(true, ResponseMessages.ORDER_DELETED, null));
     }
 }
