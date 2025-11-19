@@ -5,10 +5,12 @@ import com.simple_shop.dto.CustomerDTO;
 import com.simple_shop.model.Customer;
 import com.simple_shop.response.ApiResponse;
 import com.simple_shop.service.CustomerService;
+import com.simple_shop.service.CustomerServiceInterface;
 import com.simple_shop.service.RoleService;
-import com.simple_shop.util.JwtUtil;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -17,78 +19,125 @@ import java.util.List;
 @RequestMapping("/api/customers")
 public class CustomerController {
 
-    private final CustomerService customerService;
+    private final CustomerServiceInterface  customerService;
     private final RoleService roleService;
-    private final JwtUtil jwtUtil;
 
-    public CustomerController(CustomerService customerService, RoleService roleService, JwtUtil jwtUtil) {
+    public CustomerController(CustomerServiceInterface customerService, RoleService roleService) {
         this.customerService = customerService;
         this.roleService = roleService;
-        this.jwtUtil = jwtUtil;
     }
 
-    // Get all customers
-    // Only ADMIN can get all customers
+    // ADMIN → Get all customers
     @GetMapping
-    public ResponseEntity<ApiResponse> getAll(@RequestHeader("Authorization") String token) {
-        try {
-            token = token.replace("Bearer ", "");
-            String requesterId = jwtUtil.extractCustomerId(token);
+    public ResponseEntity<ApiResponse> getAllCustomers(@AuthenticationPrincipal Jwt principal) {
 
-            if (!roleService.isAdmin(requesterId)) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN)
-                        .body(new ApiResponse(false, ResponseMessages.ACCESS_DENIED_ADMIN_ONLY, null));
-            }
-
-            List<CustomerDTO> customers = customerService.getAllCustomers();
-            if (customers.isEmpty()) {
-                return ResponseEntity.ok(new ApiResponse(true, ResponseMessages.NO_CUSTOMERS_FOUND, customers));
-            }
-
-            return ResponseEntity.ok(new ApiResponse(true, ResponseMessages.FETCH_SUCCESS, customers));
-
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(new ApiResponse(false, ResponseMessages.TOKEN_EXPIRED, null));
+        if (!roleService.isAdmin(principal)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(new ApiResponse(false, ResponseMessages.ACCESS_DENIED_ADMIN_ONLY, null));
         }
+
+        List<CustomerDTO> customers = customerService.getAllCustomers();
+        return ResponseEntity.ok(
+                new ApiResponse(true, ResponseMessages.FETCH_SUCCESS, customers)
+        );
     }
 
-    // Get a single customer by customerId
+    // USER → Access own data | ADMIN → Access any user
     @GetMapping("/{customerId}")
-    public ResponseEntity<ApiResponse> getCustomer(@PathVariable String customerId) {
-        return customerService.getCustomerByCustomerId(customerId)
-                .map(dto -> ResponseEntity.ok(new ApiResponse(true, ResponseMessages.FETCH_SUCCESS, dto)))
-                .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND)
-                        .body(new ApiResponse(false, ResponseMessages.CUSTOMER_NOT_FOUND, null)));
+    public ResponseEntity<ApiResponse> getCustomerByCustomerId(
+            @PathVariable String customerId,
+            @AuthenticationPrincipal Jwt principal) {
+
+        String requesterKcId = principal.getSubject();
+        CustomerDTO dto = customerService.getCustomerSecure(customerId, requesterKcId);
+
+        if (dto == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(new ApiResponse(false, ResponseMessages.CUSTOMER_NOT_FOUND, null));
+        }
+
+        // dto exists but user not allowed
+        if (dto.getCustomerId() == null) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(new ApiResponse(false, ResponseMessages.ACCESS_DENIED, null));
+        }
+
+        return ResponseEntity.ok(
+                new ApiResponse(true, ResponseMessages.FETCH_SUCCESS, dto)
+        );
     }
 
-    // Create customer
-    @PostMapping
-    public ResponseEntity<ApiResponse> create(@RequestBody Customer customer) {
+    // Public → Self-onboarding (no auth)
+    @PostMapping("/create")
+    public ResponseEntity<ApiResponse> createCustomer(@RequestBody Customer customer) {
+
         return customerService.createCustomer(customer)
-                .map(created -> ResponseEntity.status(HttpStatus.CREATED)
-                        .body(new ApiResponse(true, ResponseMessages.CUSTOMER_CREATED, created)))
-                .orElseGet(() -> ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
-                        .body(new ApiResponse(false, ResponseMessages.CUSTOMER_CREATION_FAILED, null)));
+                .map(created ->
+                        ResponseEntity.status(HttpStatus.CREATED)
+                                .body(new ApiResponse(true, ResponseMessages.CUSTOMER_CREATED, created))
+                )
+                .orElseGet(() ->
+                        ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                                .body(new ApiResponse(false, ResponseMessages.CUSTOMER_CREATION_FAILED, null))
+                );
     }
 
-    // Update customer by customerId
+    // USER → Update self | ADMIN → Update anyone
     @PutMapping("/{customerId}")
-    public ResponseEntity<ApiResponse> update(@PathVariable String customerId, @RequestBody Customer updated) {
+    public ResponseEntity<ApiResponse> updateCustomer(
+            @PathVariable String customerId,
+            @RequestBody Customer updated) {
+
         return customerService.updateCustomer(customerId, updated)
-                .map(dto -> ResponseEntity.ok(new ApiResponse(true, ResponseMessages.CUSTOMER_UPDATED, dto)))
-                .orElseGet(() -> ResponseEntity.status(HttpStatus.NOT_FOUND)
-                        .body(new ApiResponse(false, ResponseMessages.CUSTOMER_NOT_FOUND, null)));
+                .map(dto -> ResponseEntity.ok(
+                        new ApiResponse(true, ResponseMessages.CUSTOMER_UPDATED, dto)))
+                .orElseGet(() ->
+                        ResponseEntity.status(HttpStatus.NOT_FOUND)
+                                .body(new ApiResponse(false, ResponseMessages.CUSTOMER_NOT_FOUND, null))
+                );
     }
 
-    // Delete customer by customerId
+    // ADMIN → Delete user
     @DeleteMapping("/{customerId}")
-    public ResponseEntity<ApiResponse> delete(@PathVariable String customerId) {
+    public ResponseEntity<ApiResponse> deleteCustomer(@PathVariable String customerId) {
+
         boolean deleted = customerService.deleteCustomer(customerId);
+
         if (!deleted) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(new ApiResponse(false, ResponseMessages.CUSTOMER_NOT_FOUND, null));
         }
-        return ResponseEntity.ok(new ApiResponse(true, ResponseMessages.CUSTOMER_DELETED, null));
+
+        return ResponseEntity.ok(
+                new ApiResponse(true, ResponseMessages.CUSTOMER_DELETED, null)
+        );
+    }
+
+    // ADMIN → Block user
+    @PutMapping("/block/{customerId}")
+    public ResponseEntity<ApiResponse> blockCustomer(@PathVariable String customerId) {
+
+        if (!customerService.blockCustomer(customerId)) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(new ApiResponse(false, "Customer not found", null));
+        }
+
+        return ResponseEntity.ok(
+                new ApiResponse(true, "Customer blocked successfully", null)
+        );
+    }
+
+    // ADMIN → Unblock user
+    @PutMapping("/unblock/{customerId}")
+    public ResponseEntity<ApiResponse> unblockCustomer(@PathVariable String customerId) {
+
+        if (!customerService.unblockCustomer(customerId)) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(new ApiResponse(false, "Customer not found", null));
+        }
+
+        return ResponseEntity.ok(
+                new ApiResponse(true, "Customer unblocked successfully", null)
+        );
     }
 }

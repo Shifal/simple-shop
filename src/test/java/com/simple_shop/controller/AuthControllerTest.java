@@ -1,175 +1,163 @@
 package com.simple_shop.controller;
 
-import com.simple_shop.constants.ResponseMessages;
-import com.simple_shop.model.Customer;
-import com.simple_shop.repository.CustomerRepository;
 import com.simple_shop.response.ApiResponse;
-import com.simple_shop.util.JwtUtil;
+import com.simple_shop.service.KeycloakAuthService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.*;
+import org.mockito.Mockito;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 
-import java.util.Optional;
+import java.util.Map;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.*;
 
-class AuthControllerTest {
+public class AuthControllerTest {
 
-    @Mock
-    private CustomerRepository customerRepository;
-
-    @Mock
-    private JwtUtil jwtUtil;
-
-    @InjectMocks
+    private KeycloakAuthService keycloakAuthService;
     private AuthController authController;
-
-    private Customer customer;
 
     @BeforeEach
     void setUp() {
-        MockitoAnnotations.openMocks(this);
-        customer = new Customer();
-        // customerId is a String in model, so here i have used "1" (String) here
-        customer.setCustomerId("1");
-        customer.setEmail("test@example.com");
-        customer.setPassword("password123");
+        keycloakAuthService = Mockito.mock(KeycloakAuthService.class);
+        authController = new AuthController(keycloakAuthService);
     }
 
-    // 1. Test: Missing email or password (blank strings)
-    @Test
-    void testLogin_MissingCredentials_Blank() {
-        Customer loginRequest = new Customer();
-        loginRequest.setEmail("");
-        loginRequest.setPassword("");
 
-        ResponseEntity<ApiResponse> response = authController.login(loginRequest);
+    @Test
+    void login_ShouldReturn400_WhenEmailOrPasswordMissing() {
+        Map<String, String> payload = Map.of("email", "user@mail.com");
+
+        ResponseEntity<ApiResponse> response = authController.login(payload);
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
         assertFalse(response.getBody().isSuccess());
-        assertEquals(ResponseMessages.INVALID_CREDENTIALS, response.getBody().getMessage());
+        assertEquals("email and password are required", response.getBody().getMessage());
     }
 
     @Test
-    void testLogin_BlankEmailAndPassword_ReturnsBadRequest() {
-        Customer request = new Customer();
-        request.setEmail(" ");
-        request.setPassword(" ");
+    void login_ShouldReturn200_WhenValidCredentials() {
+        Map<String, Object> tokenResponse = Map.of("access_token", "abc123");
 
-        ResponseEntity<ApiResponse> response = authController.login(request);
+        when(keycloakAuthService.loginWithPassword("user@mail.com", "pass123")).thenReturn(tokenResponse);
 
-        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
-        assertEquals(ResponseMessages.INVALID_CREDENTIALS, response.getBody().getMessage());
+        Map<String, String> payload = Map.of(
+                "email", "user@mail.com",
+                "password", "pass123"
+        );
+
+        ResponseEntity<ApiResponse> response = authController.login(payload);
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertTrue(response.getBody().isSuccess());
+        assertEquals("Login successful", response.getBody().getMessage());
+        assertEquals(tokenResponse, response.getBody().getData());
     }
 
-
-    // 1a. Test: Missing password is blank specifically
     @Test
-    void testLogin_PasswordBlank() {
-        Customer loginRequest = new Customer();
-        loginRequest.setEmail("test@example.com");
-        loginRequest.setPassword("   ");
+    void login_ShouldReturn401_WhenInvalidCredentials() {
+        when(keycloakAuthService.loginWithPassword(anyString(), anyString())).thenReturn(null);
 
-        ResponseEntity<ApiResponse> response = authController.login(loginRequest);
+        Map<String, String> payload = Map.of(
+                "email", "user@mail.com",
+                "password", "wrong"
+        );
 
-        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
-        assertFalse(response.getBody().isSuccess());
-        assertEquals(ResponseMessages.INVALID_CREDENTIALS, response.getBody().getMessage());
-    }
-
-    // 2. Test: User not found
-    @Test
-    void testLogin_UserNotFound() {
-        Customer loginRequest = new Customer();
-        loginRequest.setEmail("unknown@example.com");
-        loginRequest.setPassword("password123");
-
-        when(customerRepository.findByEmail("unknown@example.com"))
-                .thenReturn(Optional.empty());
-
-        ResponseEntity<ApiResponse> response = authController.login(loginRequest);
-
-        assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
-        assertFalse(response.getBody().isSuccess());
-        assertEquals(ResponseMessages.USER_NOT_FOUND, response.getBody().getMessage());
-    }
-
-    // 3. Test: Invalid password
-    @Test
-    void testLogin_InvalidPassword() {
-        Customer loginRequest = new Customer();
-        loginRequest.setEmail("test@example.com");
-        loginRequest.setPassword("wrongPassword");
-
-        when(customerRepository.findByEmail("test@example.com"))
-                .thenReturn(Optional.of(customer));
-
-        ResponseEntity<ApiResponse> response = authController.login(loginRequest);
+        ResponseEntity<ApiResponse> response = authController.login(payload);
 
         assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
         assertFalse(response.getBody().isSuccess());
-        assertEquals(ResponseMessages.INVALID_PASSWORD, response.getBody().getMessage());
+        assertEquals("Invalid credentials or Keycloak error", response.getBody().getMessage());
     }
 
-    // 4. Test: Successful login
+
     @Test
-    void testLogin_Success() {
-        Customer loginRequest = new Customer();
-        loginRequest.setEmail("test@example.com");
-        loginRequest.setPassword("password123");
-
-        when(customerRepository.findByEmail("test@example.com"))
-                .thenReturn(Optional.of(customer));
-        when(jwtUtil.generateToken("1")).thenReturn("mockedToken123");
-
-        ResponseEntity<ApiResponse> response = authController.login(loginRequest);
-
-        assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertTrue(response.getBody().isSuccess());
-        assertEquals(ResponseMessages.LOGIN_SUCCESS, response.getBody().getMessage());
-        assertEquals("mockedToken123", response.getBody().getData());
-    }
-
-    // 5. Test: Logout success
-    @Test
-    void testLogout_Success() {
-        ResponseEntity<ApiResponse> response = authController.logout();
-
-        assertEquals(HttpStatus.OK, response.getStatusCode());
-        assertTrue(response.getBody().isSuccess());
-        assertEquals(ResponseMessages.LOGOUT_SUCCESS, response.getBody().getMessage());
-    }
-
-    // 6. Test: Login - null email and password
-    @Test
-    void testLogin_NullEmailAndPassword() {
-        Customer loginRequest = new Customer();
-        loginRequest.setEmail(null);
-        loginRequest.setPassword(null);
-
-        ResponseEntity<ApiResponse> response = authController.login(loginRequest);
+    void verify_ShouldReturn400_WhenAuthorizationHeaderMissing() {
+        ResponseEntity<ApiResponse> response = authController.verify(null);
 
         assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
-        assertFalse(response.getBody().isSuccess());
-        assertEquals(ResponseMessages.INVALID_CREDENTIALS, response.getBody().getMessage());
+        assertEquals("Missing or invalid Authorization header", response.getBody().getMessage());
     }
 
-    // 7. Test: Check that token generation called once on success
     @Test
-    void testTokenGenerationCalledOnceOnSuccess() {
-        Customer loginRequest = new Customer();
-        loginRequest.setEmail("test@example.com");
-        loginRequest.setPassword("password123");
+    void verify_ShouldReturn401_WhenTokenNotActive() {
+        Map<String, Object> inactiveToken = Map.of("active", false);
 
-        when(customerRepository.findByEmail("test@example.com"))
-                .thenReturn(Optional.of(customer));
-        when(jwtUtil.generateToken("1")).thenReturn("mockedToken123");
+        when(keycloakAuthService.introspectToken("token123")).thenReturn(inactiveToken);
 
-        authController.login(loginRequest);
+        ResponseEntity<ApiResponse> response = authController.verify("Bearer token123");
 
-        verify(jwtUtil, times(1)).generateToken("1");
+        assertEquals(HttpStatus.UNAUTHORIZED, response.getStatusCode());
+        assertEquals("Token is not active", response.getBody().getMessage());
+    }
+
+    @Test
+    void verify_ShouldReturn200_WhenTokenActiveAndValid() {
+        Map<String, Object> activeToken = Map.of(
+                "active", true,
+                "name", "John Doe",
+                "preferred_username", "jdoe",
+                "email", "john@mail.com",
+                "realm_access", Map.of("roles", java.util.List.of("USER"))
+        );
+
+        when(keycloakAuthService.introspectToken("validToken")).thenReturn(activeToken);
+
+        ResponseEntity<ApiResponse> response = authController.verify("Bearer validToken");
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertTrue(response.getBody().isSuccess());
+        assertEquals("Token is valid", response.getBody().getMessage());
+
+        Map<String, Object> body = (Map<String, Object>) response.getBody().getData();
+        assertEquals("USER", body.get("role"));
+    }
+
+    @Test
+    void verify_ShouldReturn200_WhenTokenRoleIsAdmin() {
+        Map<String, Object> activeAdminToken = Map.of(
+                "active", true,
+                "realm_access", Map.of("roles", java.util.List.of("ADMIN"))
+        );
+
+        when(keycloakAuthService.introspectToken("adminToken")).thenReturn(activeAdminToken);
+
+        ResponseEntity<ApiResponse> response = authController.verify("Bearer adminToken");
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+
+        Map<String, Object> body = (Map<String, Object>) response.getBody().getData();
+        assertEquals("ADMIN", body.get("role"));
+    }
+
+
+    @Test
+    void logout_ShouldReturn400_WhenTokenIsMissing() {
+        ResponseEntity<ApiResponse> response = authController.logout(Map.of());
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertEquals("refresh token missing in body", response.getBody().getMessage());
+    }
+
+    @Test
+    void logout_ShouldReturn200_WhenLogoutSuccess() {
+        when(keycloakAuthService.logoutByRefreshToken("refToken")).thenReturn(true);
+
+        ResponseEntity<ApiResponse> response = authController.logout(Map.of("token", "refToken"));
+
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals("Logout successful", response.getBody().getMessage());
+    }
+
+    @Test
+    void logout_ShouldReturn400_WhenInvalidRefreshToken() {
+        when(keycloakAuthService.logoutByRefreshToken("badToken")).thenReturn(false);
+
+        ResponseEntity<ApiResponse> response = authController.logout(Map.of("token", "badToken"));
+
+        assertEquals(HttpStatus.BAD_REQUEST, response.getStatusCode());
+        assertEquals("Invalid or expired refresh token. Logout failed.", response.getBody().getMessage());
     }
 }

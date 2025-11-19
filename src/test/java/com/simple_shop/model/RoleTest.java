@@ -1,44 +1,59 @@
 package com.simple_shop.model;
 
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.*;
 
 class RoleTest {
 
+    private Role role;
+    private Customer customer;
+
+    @BeforeEach
+    void setUp() {
+        // Initialize a Customer first
+        customer = new Customer();
+        customer.setId(1L);
+        customer.setCustomerId("CUS-0001");
+        customer.setKeycloakId("kc-123");
+        customer.setUserName("john_doe");
+        customer.setFirstName("John");
+        customer.setLastName("Doe");
+        customer.setEmail("john@example.com");
+        customer.setPassword("pass123");
+        customer.setActive(true);
+
+        // Initialize Role
+        role = new Role();
+        role.setId(1L);
+        role.setRoleName("ADMIN");
+        role.setCustomer(customer);
+    }
+
     @Test
     void testNoArgsConstructorAndSetters() {
-        Role role = new Role();
-
-        role.setId(1L);
-        role.setRoleName("USER");
-
-        Customer customer = new Customer(1L, "CUS-0001", "John Doe", "john@example.com", "pass");
-        role.setCustomer(customer);
-
         assertEquals(1L, role.getId());
-        assertEquals("USER", role.getRoleName());
-        assertEquals(customer, role.getCustomer());
+        assertEquals("ADMIN", role.getRoleName());
+        assertNotNull(role.getCustomer());
+        assertEquals("CUS-0001", role.getCustomer().getCustomerId());
     }
 
     @Test
     void testAllArgsConstructorAndGetters() {
-        Customer customer = new Customer(1L, "CUS-0002", "Alice", "alice@example.com", "pass");
+        Role r = new Role(2L, "USER", customer);
 
-        Role role = new Role(1L, "ADMIN", customer);
-
-        assertEquals(1L, role.getId());
-        assertEquals("ADMIN", role.getRoleName());
-        assertEquals(customer, role.getCustomer());
+        assertEquals(2L, r.getId());
+        assertEquals("USER", r.getRoleName());
+        assertNotNull(r.getCustomer());
+        assertEquals("CUS-0001", r.getCustomer().getCustomerId());
     }
 
     @Test
     void testEqualsAndHashCode() {
-        Customer customer = new Customer(1L, "CUS-0003", "Bob", "bob@example.com", "pass");
-
-        Role r1 = new Role(1L, "USER", customer);
-        Role r2 = new Role(1L, "USER", customer);
-        Role r3 = new Role(2L, "ADMIN", customer);
+        Role r1 = new Role(1L, "ADMIN", customer);
+        Role r2 = new Role(1L, "ADMIN", customer);
+        Role r3 = new Role(2L, "USER", customer);
 
         assertEquals(r1, r2);
         assertEquals(r1.hashCode(), r2.hashCode());
@@ -47,13 +62,8 @@ class RoleTest {
 
     @Test
     void testToString() {
-        Customer customer = new Customer(1L, "CUS-0004", "Charlie", "charlie@example.com", "pass");
-
-        Role role = new Role(1L, "USER", customer);
         String str = role.toString();
-
-        assertTrue(str.contains("USER"));
-        assertTrue(str.contains("1"));
-        assertTrue(str.contains("Charlie"));
+        assertTrue(str.contains("ADMIN"));
+        assertTrue(str.contains("CUS-0001"));
     }
 }

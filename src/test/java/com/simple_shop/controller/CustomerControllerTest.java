@@ -3,195 +3,167 @@ package com.simple_shop.controller;
 import com.simple_shop.constants.ResponseMessages;
 import com.simple_shop.dto.CustomerDTO;
 import com.simple_shop.model.Customer;
-import com.simple_shop.service.CustomerService;
+import com.simple_shop.response.ApiResponse;
+import com.simple_shop.service.CustomerServiceInterface;
 import com.simple_shop.service.RoleService;
-import com.simple_shop.util.JwtUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.Mockito;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.http.MediaType;
-import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.web.servlet.MockMvc;
+import org.mockito.InjectMocks;
+import org.mockito.Mock;
+import org.mockito.MockitoAnnotations;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.oauth2.jwt.Jwt;
 
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
-@WebMvcTest(CustomerController.class)
-@AutoConfigureMockMvc(addFilters = false)
 class CustomerControllerTest {
 
-    @Autowired
-    private MockMvc mockMvc;
+    @Mock
+    private CustomerServiceInterface service;
 
-    @MockitoBean
-    private CustomerService customerService;
-
-    @MockitoBean
+    @Mock
     private RoleService roleService;
 
-    @MockitoBean
-    private JwtUtil jwtUtil;
+    @Mock
+    private Jwt principal;
 
-    private Customer customer;
+    @InjectMocks
+    private CustomerController controller;
+
     private CustomerDTO customerDTO;
+    private Customer customer;
 
     @BeforeEach
     void setUp() {
+        MockitoAnnotations.openMocks(this);
+        customerDTO = new CustomerDTO(1L, "CUST001", "KC123", "john", "John", "Doe", "john@example.com", true);
+
         customer = new Customer();
-        customer.setCustomerId("CUST123");
-        customer.setName("John Doe");
-
-        customerDTO = new CustomerDTO();
-        customerDTO.setCustomerId("CUST123");
-        customerDTO.setName("John Doe");
+        customer.setUserName("john");
+        customer.setEmail("john@example.com");
     }
 
     @Test
-    void testGetAllCustomers_AsAdmin_Success() throws Exception {
-        Mockito.when(jwtUtil.extractCustomerId(anyString())).thenReturn("ADMIN1");
-        Mockito.when(roleService.isAdmin("ADMIN1")).thenReturn(true);
-        Mockito.when(customerService.getAllCustomers()).thenReturn(List.of(customerDTO));
+    void testGetAllCustomers_AdminAccess() {
+        when(roleService.isAdmin(principal)).thenReturn(true);
+        when(service.getAllCustomers()).thenReturn(Arrays.asList(customerDTO));
 
-        mockMvc.perform(get("/api/customers")
-                        .header("Authorization", "Bearer token"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.message").value(ResponseMessages.FETCH_SUCCESS));
+        ResponseEntity<ApiResponse> response = controller.getAllCustomers(principal);
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+        assertEquals(1, ((List<?>) response.getBody().getData()).size());
     }
 
     @Test
-    void testGetAllCustomers_AsNonAdmin_Forbidden() throws Exception {
-        Mockito.when(jwtUtil.extractCustomerId(anyString())).thenReturn("USER1");
-        Mockito.when(roleService.isAdmin("USER1")).thenReturn(false);
+    void testGetAllCustomers_AccessDenied() {
+        when(roleService.isAdmin(principal)).thenReturn(false);
 
-        mockMvc.perform(get("/api/customers")
-                        .header("Authorization", "Bearer token"))
-                .andExpect(status().isForbidden())
-                .andExpect(jsonPath("$.message").value(ResponseMessages.ACCESS_DENIED_ADMIN_ONLY));
+        ResponseEntity<ApiResponse> response = controller.getAllCustomers(principal);
+        assertEquals(HttpStatus.FORBIDDEN, response.getStatusCode());
     }
 
     @Test
-    void testGetAllCustomers_EmptyList() throws Exception {
-        Mockito.when(jwtUtil.extractCustomerId(anyString())).thenReturn("ADMIN1");
-        Mockito.when(roleService.isAdmin("ADMIN1")).thenReturn(true);
-        Mockito.when(customerService.getAllCustomers()).thenReturn(List.of());
+    void testGetCustomerByCustomerId_Found_Owner() {
+        when(principal.getSubject()).thenReturn("KC123");
+        when(service.getCustomerSecure("CUST001", "KC123")).thenReturn(customerDTO);
 
-        mockMvc.perform(get("/api/customers")
-                        .header("Authorization", "Bearer token"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.message").value(ResponseMessages.NO_CUSTOMERS_FOUND))
-                .andExpect(jsonPath("$.success").value(true))
-                .andExpect(jsonPath("$.data").isArray());
+        ResponseEntity<ApiResponse> response = controller.getCustomerByCustomerId("CUST001", principal);
+        assertEquals(HttpStatus.OK, response.getStatusCode());
     }
 
     @Test
-    void testGetAllCustomers_TokenError() throws Exception {
-        Mockito.when(jwtUtil.extractCustomerId(anyString())).thenThrow(new RuntimeException("Invalid token"));
+    void testGetCustomerByCustomerId_NotFound() {
+        when(principal.getSubject()).thenReturn("KC123");
+        when(service.getCustomerSecure("CUST002", "KC123")).thenReturn(null);
 
-        mockMvc.perform(get("/api/customers")
-                        .header("Authorization", "Bearer invalid"))
-                .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.message").value(ResponseMessages.TOKEN_EXPIRED));
+        ResponseEntity<ApiResponse> response = controller.getCustomerByCustomerId("CUST002", principal);
+        assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
     }
 
     @Test
-    void testGetCustomerById_Success() throws Exception {
-        Mockito.when(customerService.getCustomerByCustomerId("CUST123"))
-                .thenReturn(Optional.of(customerDTO));
+    void testCreateCustomer_Success() {
+        when(service.createCustomer(any(Customer.class))).thenReturn(Optional.of(customerDTO));
 
-        mockMvc.perform(get("/api/customers/CUST123"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.message").value(ResponseMessages.FETCH_SUCCESS));
+        ResponseEntity<ApiResponse> response = controller.createCustomer(customer);
+        assertEquals(HttpStatus.CREATED, response.getStatusCode());
+        assertTrue(response.getBody().isSuccess());
     }
 
     @Test
-    void testGetCustomerById_NotFound() throws Exception {
-        Mockito.when(customerService.getCustomerByCustomerId("CUST123"))
-                .thenReturn(Optional.empty());
+    void testCreateCustomer_Failure() {
+        when(service.createCustomer(any(Customer.class))).thenReturn(Optional.empty());
 
-        mockMvc.perform(get("/api/customers/CUST123"))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.message").value(ResponseMessages.CUSTOMER_NOT_FOUND));
+        ResponseEntity<ApiResponse> response = controller.createCustomer(customer);
+        assertEquals(HttpStatus.INTERNAL_SERVER_ERROR, response.getStatusCode());
+        assertFalse(response.getBody().isSuccess());
     }
 
     @Test
-    void testCreateCustomer_Success() throws Exception {
-        Mockito.when(customerService.createCustomer(any(Customer.class)))
-                .thenReturn(Optional.of(customerDTO));
+    void testUpdateCustomer_Success() {
+        when(service.updateCustomer(eq("CUST001"), any(Customer.class))).thenReturn(Optional.of(customerDTO));
 
-        String json = "{\"customerId\":\"CUST123\",\"name\":\"John Doe\"}";
-
-        mockMvc.perform(post("/api/customers")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.message").value(ResponseMessages.CUSTOMER_CREATED));
+        ResponseEntity<ApiResponse> response = controller.updateCustomer("CUST001", customer);
+        assertEquals(HttpStatus.OK, response.getStatusCode());
     }
 
     @Test
-    void testCreateCustomer_Failure() throws Exception {
-        Mockito.when(customerService.createCustomer(any(Customer.class)))
-                .thenReturn(Optional.empty());
+    void testUpdateCustomer_NotFound() {
+        when(service.updateCustomer(eq("CUST002"), any(Customer.class))).thenReturn(Optional.empty());
 
-        String json = "{\"customerId\":\"CUST123\",\"name\":\"John Doe\"}";
-
-        mockMvc.perform(post("/api/customers")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json))
-                .andExpect(status().isInternalServerError())
-                .andExpect(jsonPath("$.message").value(ResponseMessages.CUSTOMER_CREATION_FAILED));
+        ResponseEntity<ApiResponse> response = controller.updateCustomer("CUST002", customer);
+        assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
     }
 
     @Test
-    void testUpdateCustomer_Success() throws Exception {
-        Mockito.when(customerService.updateCustomer(anyString(), any(Customer.class)))
-                .thenReturn(Optional.of(customerDTO));
+    void testDeleteCustomer_Success() {
+        when(service.deleteCustomer("CUST001")).thenReturn(true);
 
-        String json = "{\"name\":\"Updated Name\"}";
-
-        mockMvc.perform(put("/api/customers/CUST123")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.message").value(ResponseMessages.CUSTOMER_UPDATED));
+        ResponseEntity<ApiResponse> response = controller.deleteCustomer("CUST001");
+        assertEquals(HttpStatus.OK, response.getStatusCode());
     }
 
     @Test
-    void testUpdateCustomer_NotFound() throws Exception {
-        Mockito.when(customerService.updateCustomer(anyString(), any(Customer.class)))
-                .thenReturn(Optional.empty());
+    void testDeleteCustomer_NotFound() {
+        when(service.deleteCustomer("CUST002")).thenReturn(false);
 
-        String json = "{\"name\":\"Updated Name\"}";
-
-        mockMvc.perform(put("/api/customers/CUST123")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(json))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.message").value(ResponseMessages.CUSTOMER_NOT_FOUND));
+        ResponseEntity<ApiResponse> response = controller.deleteCustomer("CUST002");
+        assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
     }
 
     @Test
-    void testDeleteCustomer_Success() throws Exception {
-        Mockito.when(customerService.deleteCustomer("CUST123")).thenReturn(true);
+    void testBlockCustomer_Success() {
+        when(service.blockCustomer("CUST001")).thenReturn(true);
 
-        mockMvc.perform(delete("/api/customers/CUST123"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.message").value(ResponseMessages.CUSTOMER_DELETED));
+        ResponseEntity<ApiResponse> response = controller.blockCustomer("CUST001");
+        assertEquals(HttpStatus.OK, response.getStatusCode());
     }
 
     @Test
-    void testDeleteCustomer_NotFound() throws Exception {
-        Mockito.when(customerService.deleteCustomer("CUST123")).thenReturn(false);
+    void testBlockCustomer_NotFound() {
+        when(service.blockCustomer("CUST002")).thenReturn(false);
 
-        mockMvc.perform(delete("/api/customers/CUST123"))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.message").value(ResponseMessages.CUSTOMER_NOT_FOUND));
+        ResponseEntity<ApiResponse> response = controller.blockCustomer("CUST002");
+        assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
+    }
+
+    @Test
+    void testUnblockCustomer_Success() {
+        when(service.unblockCustomer("CUST001")).thenReturn(true);
+
+        ResponseEntity<ApiResponse> response = controller.unblockCustomer("CUST001");
+        assertEquals(HttpStatus.OK, response.getStatusCode());
+    }
+
+    @Test
+    void testUnblockCustomer_NotFound() {
+        when(service.unblockCustomer("CUST002")).thenReturn(false);
+
+        ResponseEntity<ApiResponse> response = controller.unblockCustomer("CUST002");
+        assertEquals(HttpStatus.NOT_FOUND, response.getStatusCode());
     }
 }

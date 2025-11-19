@@ -21,7 +21,7 @@ public class CustomerJdbcRepository {
         Customer c = new Customer();
         c.setId(rs.getLong("id"));
         c.setCustomerId(rs.getString("customer_id"));
-        c.setName(rs.getString("name"));
+        c.setUserName(rs.getString("name"));
         c.setEmail(rs.getString("email"));
         c.setPassword(rs.getString("password"));
         return c;
@@ -44,7 +44,7 @@ public class CustomerJdbcRepository {
         jdbcTemplate.update(
                 "INSERT INTO customers(customer_id, name, email, password) VALUES (?, ?, ?, ?)",
                 customer.getCustomerId(),
-                customer.getName(),
+                customer.getUserName(),
                 customer.getEmail(),
                 customer.getPassword()
         );
@@ -54,7 +54,7 @@ public class CustomerJdbcRepository {
         jdbcTemplate.update(
                 "UPDATE customers SET customer_id = ?, name = ?, email = ?, password = ? WHERE id = ?",
                 customer.getCustomerId(),
-                customer.getName(),
+                customer.getUserName(),
                 customer.getEmail(),
                 customer.getPassword(),
                 id

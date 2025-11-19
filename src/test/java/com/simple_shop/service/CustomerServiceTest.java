@@ -3,182 +3,155 @@ package com.simple_shop.service;
 import com.simple_shop.dto.CustomerDTO;
 import com.simple_shop.model.Customer;
 import com.simple_shop.repository.CustomerRepository;
-import jakarta.persistence.EntityManager;
-import jakarta.persistence.Query;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
-import org.mockito.*;
+import org.mockito.ArgumentCaptor;
 
-import java.util.*;
+import jakarta.persistence.EntityManager;
+import java.util.Arrays;
+import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
 class CustomerServiceTest {
 
-    @Mock
     private CustomerRepository customerRepo;
-
-    @Mock
     private EntityManager entityManager;
-
-    @Mock
     private RoleService roleService;
+    private KeycloakService keycloakService;
 
-    @InjectMocks
     private CustomerService customerService;
 
     private Customer customer;
 
     @BeforeEach
     void setUp() {
-        MockitoAnnotations.openMocks(this);
+        customerRepo = mock(CustomerRepository.class);
+        entityManager = mock(EntityManager.class);
+        roleService = mock(RoleService.class);
+        keycloakService = mock(KeycloakService.class);
 
-        customer = createCustomer("John Doe", "john@example.com", "password123");
+        customerService = new CustomerService(customerRepo, entityManager, roleService, keycloakService);
+
+        customer = new Customer();
+        customer.setCustomerId("CUS-1001");
+        customer.setUserName("john_doe");
+        customer.setFirstName("John");
+        customer.setLastName("Doe");
+        customer.setEmail("john@example.com");
+        customer.setPassword("pass123");
+        customer.setActive(true);
     }
 
-    // ====================== Helper Methods ======================
-    private Customer createCustomer(String name, String email, String password) {
-        Customer c = new Customer();
-        c.setName(name);
-        c.setEmail(email);
-        c.setPassword(password);
-        return c;
-    }
-
-    private Query mockNextValQuery(long seqValue) {
-        Query queryMock = mock(Query.class);
-        when(entityManager.createNativeQuery("SELECT nextval('customer_seq')")).thenReturn(queryMock);
-        when(queryMock.getSingleResult()).thenReturn(seqValue);
-        return queryMock;
-    }
-
-    // ====================== getAllCustomers ======================
     @Test
     void testGetAllCustomers() {
-        Customer savedCustomer = createCustomer("John Doe", "john@example.com", "password123");
-        savedCustomer.setCustomerId("CUS-20251112-0001");
+        when(customerRepo.findAll()).thenReturn(Arrays.asList(customer));
 
-        when(customerRepo.findAll()).thenReturn(List.of(savedCustomer));
+        List<CustomerDTO> customers = customerService.getAllCustomers();
 
-        List<CustomerDTO> result = customerService.getAllCustomers();
-
-        assertEquals(1, result.size());
-        assertEquals("CUS-20251112-0001", result.get(0).getCustomerId());
+        assertEquals(1, customers.size());
+        assertEquals("CUS-1001", customers.get(0).getCustomerId());
     }
 
-    // ====================== createCustomer ======================
     @Test
-    void testCreateCustomer_Success() {
-        mockNextValQuery(1L);
-
-        Customer savedCustomer = createCustomer(customer.getName(), customer.getEmail(), customer.getPassword());
-        savedCustomer.setCustomerId("CUS-20251112-0001");
-        when(customerRepo.save(any(Customer.class))).thenReturn(savedCustomer);
+    void testCreateCustomerSuccess() {
+        // Mock entityManager for sequence
+        when(entityManager.createNativeQuery("SELECT nextval('customer_seq')").getSingleResult()).thenReturn(1L);
+        // Mock Keycloak
+        when(keycloakService.createKeycloakUser(anyString(), anyString(), anyString(), anyString(), anyBoolean(), anyString(), anyString()))
+                .thenReturn("kc-123");
+        // Mock repository save
+        when(customerRepo.save(any(Customer.class))).thenReturn(customer);
 
         Optional<CustomerDTO> result = customerService.createCustomer(customer);
 
         assertTrue(result.isPresent());
-        assertEquals("CUS-20251112-0001", result.get().getCustomerId());
+        assertEquals("CUS-", result.get().getCustomerId().substring(0, 4));
+        assertEquals("john_doe", result.get().getUserName());
         verify(roleService, times(1)).assignDefaultRole(any(Customer.class));
     }
 
     @Test
-    void testCreateCustomer_Failure() {
-        Query queryMock = mock(Query.class);
-        when(entityManager.createNativeQuery("SELECT nextval('customer_seq')")).thenReturn(queryMock);
-        when(queryMock.getSingleResult()).thenThrow(new IllegalArgumentException("DB error"));
+    void testUpdateCustomer() {
+        Customer updated = new Customer();
+        updated.setUserName("john_updated");
+        updated.setFirstName("John");
+        updated.setLastName("Doe");
+        updated.setEmail("john_updated@example.com");
+        updated.setPassword("newpass");
+        updated.setActive(true);
 
-        Optional<CustomerDTO> result = customerService.createCustomer(customer);
+        when(customerRepo.findByCustomerId("CUS-1001")).thenReturn(Optional.of(customer));
+        when(customerRepo.save(any(Customer.class))).thenReturn(customer);
 
-        assertFalse(result.isPresent());
-    }
-
-    // ====================== updateCustomer ======================
-    @Test
-    void testUpdateCustomer_Success() {
-        Customer existing = createCustomer("Old Name", "old@example.com", "oldpass");
-        existing.setCustomerId("CUS-0001");
-
-        when(customerRepo.findByCustomerId("CUS-0001")).thenReturn(Optional.of(existing));
-        when(customerRepo.save(any(Customer.class))).thenAnswer(i -> i.getArgument(0));
-
-        Customer updated = createCustomer("New Name", "new@example.com", "newpass");
-
-        Optional<CustomerDTO> result = customerService.updateCustomer("CUS-0001", updated);
+        Optional<CustomerDTO> result = customerService.updateCustomer("CUS-1001", updated);
 
         assertTrue(result.isPresent());
-        assertEquals("New Name", result.get().getName());
-        assertEquals("new@example.com", result.get().getEmail());
+        assertEquals("john_updated", result.get().getUserName());
+        verify(keycloakService, times(1)).updateKeycloakUser(anyString(), anyString(), anyString(), anyString(), anyString(), anyString());
     }
 
     @Test
-    void testUpdateCustomer_NotFound() {
-        when(customerRepo.findByCustomerId("CUS-9999")).thenReturn(Optional.empty());
+    void testDeleteCustomer() {
+        customer.setKeycloakId("kc-123");
+        when(customerRepo.findByCustomerId("CUS-1001")).thenReturn(Optional.of(customer));
 
-        Optional<CustomerDTO> result = customerService.updateCustomer("CUS-9999", customer);
+        boolean deleted = customerService.deleteCustomer("CUS-1001");
 
-        assertFalse(result.isPresent());
-    }
-
-    // ====================== deleteCustomer ======================
-    @ParameterizedTest
-    @CsvSource({
-            "CUS-0001,true",
-            "CUS-9999,false"
-    })
-    void testDeleteCustomer(String customerId, boolean exists) {
-        when(customerRepo.existsByCustomerId(customerId)).thenReturn(exists);
-        if (exists) {
-            doNothing().when(customerRepo).deleteByCustomerId(customerId);
-        }
-
-        boolean result = customerService.deleteCustomer(customerId);
-        assertEquals(exists, result);
-    }
-
-    // ====================== getCustomerByCustomerId ======================
-    @ParameterizedTest
-    @CsvSource({
-            "CUS-0001,true",
-            "CUS-9999,false"
-    })
-    void testGetCustomerByCustomerId(String customerId, boolean exists) {
-        if (exists) {
-            Customer c = createCustomer("John", "john@example.com", "pass");
-            c.setCustomerId(customerId);
-            when(customerRepo.findByCustomerId(customerId)).thenReturn(Optional.of(c));
-        } else {
-            when(customerRepo.findByCustomerId(customerId)).thenReturn(Optional.empty());
-        }
-
-        Optional<CustomerDTO> result = customerService.getCustomerByCustomerId(customerId);
-        assertEquals(exists, result.isPresent());
-    }
-
-    // ====================== createAdminCustomer ======================
-    @Test
-    void testCreateAdminCustomer_Success() {
-        mockNextValQuery(1L);
-
-        Customer savedCustomer = createCustomer(customer.getName(), customer.getEmail(), customer.getPassword());
-        savedCustomer.setCustomerId("CUS-20251112-0001");
-        when(customerRepo.save(any(Customer.class))).thenReturn(savedCustomer);
-
-        Optional<CustomerDTO> result = customerService.createAdminCustomer(customer);
-
-        assertTrue(result.isPresent());
-        assertEquals("CUS-20251112-0001", result.get().getCustomerId());
+        assertTrue(deleted);
+        verify(roleService, times(1)).deleteRolesByCustomer(customer);
+        verify(keycloakService, times(1)).deleteUserByKeycloakId("kc-123");
+        verify(customerRepo, times(1)).delete(customer);
     }
 
     @Test
-    void testCreateAdminCustomer_Failure() {
-        when(entityManager.createNativeQuery("SELECT nextval('customer_seq')")).thenThrow(RuntimeException.class);
+    void testBlockAndUnblockCustomer() {
+        when(customerRepo.findByCustomerId("CUS-1001")).thenReturn(Optional.of(customer));
+        when(customerRepo.save(any(Customer.class))).thenReturn(customer);
 
-        Optional<CustomerDTO> result = customerService.createAdminCustomer(customer);
+        boolean blocked = customerService.blockCustomer("CUS-1001");
+        assertTrue(blocked);
+        assertFalse(customer.isActive());
+        verify(keycloakService, times(1)).disableUser("kc-123");
 
-        assertFalse(result.isPresent());
+        boolean unblocked = customerService.unblockCustomer("CUS-1001");
+        assertTrue(unblocked);
+        assertTrue(customer.isActive());
+        verify(keycloakService, times(1)).enableUser("kc-123");
+    }
+
+    @Test
+    void testGetCustomerSecureOwner() {
+        customer.setKeycloakId("kc-123");
+        when(customerRepo.findByCustomerId("CUS-1001")).thenReturn(Optional.of(customer));
+        when(roleService.isAdmin("kc-123")).thenReturn(false);
+
+        CustomerDTO dto = customerService.getCustomerSecure("CUS-1001", "kc-123");
+        assertNotNull(dto);
+        assertEquals("CUS-1001", dto.getCustomerId());
+    }
+
+    @Test
+    void testGetCustomerSecureAdmin() {
+        customer.setKeycloakId("kc-123");
+        when(customerRepo.findByCustomerId("CUS-1001")).thenReturn(Optional.of(customer));
+        when(roleService.isAdmin("kc-admin")).thenReturn(true);
+
+        CustomerDTO dto = customerService.getCustomerSecure("CUS-1001", "kc-admin");
+        assertNotNull(dto);
+        assertEquals("CUS-1001", dto.getCustomerId());
+    }
+
+    @Test
+    void testGetCustomerSecureUnauthorized() {
+        customer.setKeycloakId("kc-123");
+        when(customerRepo.findByCustomerId("CUS-1001")).thenReturn(Optional.of(customer));
+        when(roleService.isAdmin("kc-other")).thenReturn(false);
+
+        CustomerDTO dto = customerService.getCustomerSecure("CUS-1001", "kc-other");
+        assertNotNull(dto);
+        assertNull(dto.getCustomerId()); // empty DTO
     }
 }

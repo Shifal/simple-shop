@@ -10,18 +10,26 @@ public class CustomerMapper {
         CustomerDTO dto = new CustomerDTO();
         dto.setId(customer.getId());
         dto.setCustomerId(customer.getCustomerId());
-        dto.setName(customer.getName());
+        dto.setKeycloakId(customer.getKeycloakId());
+        dto.setUserName(customer.getUserName());
+        dto.setFirstName(customer.getFirstName());
+        dto.setLastName(customer.getLastName());
         dto.setEmail(customer.getEmail());
+        dto.setActive(customer.isActive());
         return dto;
     }
 
     public static Customer toEntity(CustomerDTO dto) {
         if (dto == null) return null;
-        Customer customer = new Customer();
-        customer.setId(dto.getId());
-        customer.setCustomerId(dto.getCustomerId());
-        customer.setName(dto.getName());
-        customer.setEmail(dto.getEmail());
-        return customer;
+        Customer c = new Customer();
+        c.setId(dto.getId());
+        c.setCustomerId(dto.getCustomerId());
+        c.setKeycloakId(dto.getKeycloakId());
+        c.setUserName(dto.getUserName());
+        c.setFirstName(dto.getFirstName());
+        c.setLastName(dto.getLastName());
+        c.setEmail(dto.getEmail());
+        c.setActive(dto.isActive());
+        return c;
     }
 }

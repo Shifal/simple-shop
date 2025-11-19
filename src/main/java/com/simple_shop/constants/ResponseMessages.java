@@ -42,4 +42,6 @@ public class ResponseMessages {
     public static final String ADMIN_PROMOTION_FAILED = "Customer not found or already ADMIN.";
     public static final String ROLE_NOT_FOUND = "Role not found.";
     public static final String ACCESS_DENIED_ADMIN_ONLY = "Access denied: Only ADMIN can perform this action.";
+    public static final String ACCESS_DENIED = "Access denied: cannot perform this action.";
+
 }

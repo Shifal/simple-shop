@@ -3,11 +3,9 @@ package com.simple_shop.service;
 import com.simple_shop.dto.CustomerDTO;
 import com.simple_shop.mapper.CustomerMapper;
 import com.simple_shop.model.Customer;
-import com.simple_shop.model.Role;
 import com.simple_shop.repository.CustomerRepository;
-import jakarta.persistence.EntityManager; // is used here mainly for custom sequence generation and manual role insertions.
-import jakarta.transaction.Transactional; // ensures atomic operations (all or nothing).
-import org.springframework.dao.DataAccessException;
+import jakarta.persistence.EntityManager;
+import jakarta.transaction.Transactional;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -16,100 +14,45 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
-public class CustomerService {
+public class CustomerService implements CustomerServiceInterface {
 
     private final CustomerRepository customerRepo;
     private final EntityManager entityManager;
     private final RoleService roleService;
+    private final KeycloakService keycloakService;
 
-    public CustomerService(CustomerRepository customerRepo, EntityManager entityManager, RoleService roleService) {
+    public CustomerService(CustomerRepository customerRepo, EntityManager entityManager, RoleService roleService, KeycloakService keycloakService) {
         this.customerRepo = customerRepo;
         this.entityManager = entityManager;
         this.roleService = roleService;
+        this.keycloakService = keycloakService;
     }
 
-    // Get all customers
+    @Override
     public List<CustomerDTO> getAllCustomers() {
-        return customerRepo.findAll()
-                .stream()
-                .map(CustomerMapper::toDTO)
-                .collect(Collectors.toList());
+        return customerRepo.findAll().stream().map(CustomerMapper::toDTO).collect(Collectors.toList());
     }
 
-    // Create customer
+    @Override
     @Transactional
     public Optional<CustomerDTO> createCustomer(Customer customer) {
         try {
-            Long nextVal = ((Number) entityManager
-                    .createNativeQuery("SELECT nextval('customer_seq')")
-                    .getSingleResult()).longValue();
+            Long nextVal = ((Number) entityManager.createNativeQuery("SELECT nextval('customer_seq')").getSingleResult()).longValue();
 
             String prefix = "CUS-" + LocalDate.now().toString().replace("-", "");
             String formattedNumber = String.format("%04d", nextVal);
             String generatedCustomerId = prefix + "-" + formattedNumber;
 
             customer.setCustomerId(generatedCustomerId);
+
+            String kcId = keycloakService.createKeycloakUser(customer.getUserName(), customer.getEmail(), customer.getPassword(), "USER", customer.isActive(), customer.getFirstName(), customer.getLastName());
+
+            if (kcId == null) return Optional.empty();
+
+            customer.setKeycloakId(kcId);
 
             Customer saved = customerRepo.save(customer);
             roleService.assignDefaultRole(saved);
-
-            return Optional.of(CustomerMapper.toDTO(saved));
-        } catch (DataAccessException | IllegalArgumentException ex) {
-            ex.printStackTrace();
-            return Optional.empty();
-        }
-    }
-
-    // Update customer by customerId
-    @Transactional
-    public Optional<CustomerDTO> updateCustomer(String customerId, Customer updated) {
-        return customerRepo.findByCustomerId(customerId)
-                .map(existing -> {
-                    existing.setName(updated.getName());
-                    existing.setEmail(updated.getEmail());
-                    existing.setPassword(updated.getPassword());
-                    Customer saved = customerRepo.save(existing);
-                    return CustomerMapper.toDTO(saved);
-                });
-    }
-
-    // Delete customer by customerId
-    @Transactional
-    public boolean deleteCustomer(String customerId) {
-        if (!customerRepo.existsByCustomerId(customerId)) {
-            return false;
-        }
-        customerRepo.deleteByCustomerId(customerId);
-        return true;
-    }
-
-    // Get customer by customerId
-    public Optional<CustomerDTO> getCustomerByCustomerId(String customerId) {
-        return customerRepo.findByCustomerId(customerId)
-                .map(CustomerMapper::toDTO);
-    }
-
-    @Transactional // If any part fails (e.g., DB insert, role creation), the entire operation rolls back automatically.
-    public Optional<CustomerDTO> createAdminCustomer(Customer customer) {
-        try {
-            Long nextVal = ((Number) entityManager
-                    .createNativeQuery("SELECT nextval('customer_seq')")
-                    .getSingleResult()).longValue();
-
-            String prefix = "CUS-" + LocalDate.now().toString().replace("-", "");
-            String formattedNumber = String.format("%04d", nextVal);
-            String generatedCustomerId = prefix + "-" + formattedNumber;
-
-            customer.setCustomerId(generatedCustomerId);
-
-            // Save the customer
-            Customer saved = customerRepo.save(customer);
-
-            // Assign admin role explicitly
-            Role adminRole = new Role();
-            adminRole.setRoleName("ADMIN");
-            adminRole.setCustomer(saved);
-            entityManager.persist(adminRole);
 
             return Optional.of(CustomerMapper.toDTO(saved));
 
@@ -117,6 +60,106 @@ public class CustomerService {
             e.printStackTrace();
             return Optional.empty();
         }
+    }
+
+    @Override
+    @Transactional
+    public Optional<CustomerDTO> updateCustomer(String customerId, Customer updated) {
+
+        return customerRepo.findByCustomerId(customerId).map(existing -> {
+
+            existing.setUserName(updated.getUserName());
+            existing.setFirstName(updated.getFirstName());
+            existing.setLastName(updated.getLastName());
+            existing.setEmail(updated.getEmail());
+            existing.setActive(updated.isActive());
+
+            boolean passwordChanged = false;
+
+            if (updated.getPassword() != null && !updated.getPassword().isBlank()) {
+                existing.setPassword(updated.getPassword());
+                passwordChanged = true;
+            }
+
+            Customer saved = customerRepo.save(existing);
+
+            keycloakService.updateKeycloakUser(saved.getKeycloakId(), saved.getUserName(), saved.getEmail(), saved.getFirstName(), saved.getLastName(), passwordChanged ? updated.getPassword() : null);
+
+            return Optional.of(CustomerMapper.toDTO(saved)).get();
+        });
+    }
+
+    @Override
+    @Transactional
+    public boolean deleteCustomer(String customerId) {
+
+        Optional<Customer> opt = customerRepo.findByCustomerId(customerId);
+        if (opt.isEmpty()) return false;
+
+        Customer customer = opt.get();
+
+        roleService.deleteRolesByCustomer(customer);
+
+        if (customer.getKeycloakId() != null) {
+            keycloakService.deleteUserByKeycloakId(customer.getKeycloakId());
+        }
+
+        customerRepo.delete(customer);
+
+        return true;
+    }
+
+    @Override
+    public CustomerDTO getCustomerSecure(String customerId, String requesterKcId) {
+
+        Customer customer = customerRepo.findByCustomerId(customerId).orElse(null);
+
+        if (customer == null) return null;
+
+        boolean isOwner = requesterKcId.equals(customer.getKeycloakId());
+        boolean isAdmin = roleService.isAdmin(requesterKcId);
+
+        if (!isOwner && !isAdmin) return new CustomerDTO();
+
+        return CustomerMapper.toDTO(customer);
+    }
+
+    @Override
+    @Transactional
+    public boolean blockCustomer(String customerId) {
+
+        Optional<Customer> opt = customerRepo.findByCustomerId(customerId);
+        if (opt.isEmpty()) return false;
+
+        Customer customer = opt.get();
+
+        // Block in Keycloak
+        keycloakService.disableUser(customer.getKeycloakId());
+
+        // Update DB
+        customer.setActive(false);
+        customerRepo.save(customer);
+
+        return true;
+    }
+
+    @Override
+    @Transactional
+    public boolean unblockCustomer(String customerId) {
+
+        Optional<Customer> opt = customerRepo.findByCustomerId(customerId);
+        if (opt.isEmpty()) return false;
+
+        Customer customer = opt.get();
+
+        // Unblock in Keycloak
+        keycloakService.enableUser(customer.getKeycloakId());
+
+        // Update DB
+        customer.setActive(true);
+        customerRepo.save(customer);
+
+        return true;
     }
 
 }

@@ -6,50 +6,28 @@ import com.simple_shop.repository.CustomerRepository;
 import com.simple_shop.repository.RoleRepository;
 import jakarta.transaction.Transactional;
 import org.springframework.stereotype.Service;
-
-import java.util.Optional;
+import org.springframework.security.oauth2.jwt.Jwt;
+import java.util.List;
+import java.util.Map;
 
 @Service
 public class RoleService {
 
     private final RoleRepository roleRepo;
-    private final CustomerRepository customerRepo;
 
     public RoleService(RoleRepository roleRepo, CustomerRepository customerRepo) {
         this.roleRepo = roleRepo;
-        this.customerRepo = customerRepo;
     }
 
     // Assign default USER role when customer is created
     @Transactional
     public void assignDefaultRole(Customer customer) {
         Role role = new Role();
-        role.setRoleName("USER");
+        role.setRoleName("USER".toUpperCase());
         role.setCustomer(customer);
         roleRepo.save(role);
     }
 
-    // Only ADMIN can create another ADMIN
-    @Transactional
-    public Optional<Role> createAdminRole(String adminCustomerId, String targetCustomerId) {
-        Optional<Role> adminRole = roleRepo.findByCustomer_CustomerId(adminCustomerId);
-        if (adminRole.isEmpty() || !adminRole.get().getRoleName().equalsIgnoreCase("ADMIN")) {
-            throw new RuntimeException("Access denied. Only ADMIN can create another ADMIN.");
-        }
-
-        Customer targetCustomer = customerRepo.findByCustomerId(targetCustomerId)
-                .orElseThrow(() -> new RuntimeException("Target customer not found."));
-
-        Role newAdminRole = new Role();
-        newAdminRole.setRoleName("ADMIN");
-        newAdminRole.setCustomer(targetCustomer);
-
-        return Optional.of(roleRepo.save(newAdminRole));
-    }
-
-    public Optional<Role> getRoleByCustomerId(String customerId) {
-        return roleRepo.findByCustomer_CustomerId(customerId);
-    }
 
     public boolean isAdmin(String customerId) {
         return roleRepo.findByCustomer_CustomerId(customerId)
@@ -57,22 +35,23 @@ public class RoleService {
                 .orElse(false);
     }
 
-    @Transactional
-    public boolean promoteToAdmin(String customerId) {
-        Optional<Role> existingRole = roleRepo.findByCustomer_CustomerId(customerId);
+    // Role check based on Keycloak token
+    public boolean isAdmin(Jwt principal) {
 
-        if (existingRole.isPresent()) {
-            Role role = existingRole.get();
-            if ("ADMIN".equals(role.getRoleName())) {
-                return false;
-            }
-            role.setRoleName("ADMIN");
-            roleRepo.save(role);
-            return true;
-        }
+        Map<String, Object> realmAccess = principal.getClaimAsMap("realm_access");
 
-        return false;
+        if (realmAccess == null) return false;
+
+        List<String> roles = (List<String>) realmAccess.get("roles");
+
+        if (roles == null) return false;
+
+        return roles.contains("ADMIN");
     }
 
+    @Transactional
+    public void deleteRolesByCustomer(Customer customer) {
+        roleRepo.deleteByCustomer(customer);
+    }
 
 }
