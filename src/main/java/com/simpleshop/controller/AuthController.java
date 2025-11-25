@@ -11,7 +11,7 @@ import org.springframework.web.client.HttpClientErrorException;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/auth")
+@RequestMapping("${api.auth.base}")
 public class AuthController {
 
     private final KeycloakAuthService keycloakAuthService;
