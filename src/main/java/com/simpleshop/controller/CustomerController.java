@@ -18,7 +18,7 @@ import java.util.List;
 @RequestMapping("/api/customers")
 public class CustomerController {
 
-    private final CustomerServiceInterface  customerService;
+    private final CustomerServiceInterface customerService;
     private final RoleService roleService;
 
     public CustomerController(CustomerServiceInterface customerService, RoleService roleService) {
@@ -27,7 +27,7 @@ public class CustomerController {
     }
 
     // ADMIN → Get all customers
-    @GetMapping
+    @GetMapping("/getAllCustomers")
     public ResponseEntity<ApiResponse> getAllCustomers(@AuthenticationPrincipal Jwt principal) {
 
         if (!roleService.isAdmin(principal)) {
@@ -85,7 +85,19 @@ public class CustomerController {
     @PutMapping("/{customerId}")
     public ResponseEntity<ApiResponse> updateCustomer(
             @PathVariable String customerId,
-            @RequestBody Customer updated) {
+            @RequestBody Customer updated,
+            @AuthenticationPrincipal Jwt principal) {
+
+        String requesterKcId = principal.getSubject();
+
+        // Only ADMIN can update anyone.
+        // USER can update only their own data.
+        if (!roleService.isAdmin(principal)
+                && !customerService.isOwner(customerId, requesterKcId)) {
+
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(new ApiResponse(false, ResponseMessages.ACCESS_DENIED, null));
+        }
 
         return customerService.updateCustomer(customerId, updated)
                 .map(dto -> ResponseEntity.ok(
@@ -96,9 +108,23 @@ public class CustomerController {
                 );
     }
 
+
     // ADMIN → Delete user
+    // USER → delete themselves | ADMIN → delete anyone
     @DeleteMapping("/{customerId}")
-    public ResponseEntity<ApiResponse> deleteCustomer(@PathVariable String customerId) {
+    public ResponseEntity<ApiResponse> deleteCustomer(
+            @PathVariable String customerId,
+            @AuthenticationPrincipal Jwt principal) {
+
+        String requesterKcId = principal.getSubject();
+        boolean isAdmin = roleService.isAdmin(principal);
+        boolean isOwner = customerService.isOwner(customerId, requesterKcId);
+
+        // USER cannot delete other users
+        if (!isAdmin && !isOwner) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(new ApiResponse(false, ResponseMessages.ACCESS_DENIED, null));
+        }
 
         boolean deleted = customerService.deleteCustomer(customerId);
 
@@ -112,13 +138,21 @@ public class CustomerController {
         );
     }
 
+
     // ADMIN → Block user
     @PutMapping("/block/{customerId}")
-    public ResponseEntity<ApiResponse> blockCustomer(@PathVariable String customerId) {
+    public ResponseEntity<ApiResponse> blockCustomer(
+            @PathVariable String customerId,
+            @AuthenticationPrincipal Jwt principal) {
+
+        if (!roleService.isAdmin(principal)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(new ApiResponse(false, ResponseMessages.ACCESS_DENIED_ADMIN_ONLY, null));
+        }
 
         if (!customerService.blockCustomer(customerId)) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(new ApiResponse(false, "Customer not found", null));
+                    .body(new ApiResponse(false, ResponseMessages.CUSTOMER_NOT_FOUND, null));
         }
 
         return ResponseEntity.ok(
@@ -126,13 +160,21 @@ public class CustomerController {
         );
     }
 
+
     // ADMIN → Unblock user
     @PutMapping("/unblock/{customerId}")
-    public ResponseEntity<ApiResponse> unblockCustomer(@PathVariable String customerId) {
+    public ResponseEntity<ApiResponse> unblockCustomer(
+            @PathVariable String customerId,
+            @AuthenticationPrincipal Jwt principal) {
+
+        if (!roleService.isAdmin(principal)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(new ApiResponse(false, ResponseMessages.ACCESS_DENIED_ADMIN_ONLY, null));
+        }
 
         if (!customerService.unblockCustomer(customerId)) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
-                    .body(new ApiResponse(false, "Customer not found", null));
+                    .body(new ApiResponse(false, ResponseMessages.CUSTOMER_NOT_FOUND, null));
         }
 
         return ResponseEntity.ok(

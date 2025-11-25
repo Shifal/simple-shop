@@ -3,7 +3,9 @@ server:
 
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/ordersdb
+#    url: jdbc:postgresql://host.docker.internal:5432/ordersdb
+    url: jdbc:postgresql://host.docker.internal:5432/ordersdb
+
     username: postgres
     password: Shifal@0786
     driver-class-name: org.postgresql.Driver
@@ -19,11 +21,11 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: http://localhost:8080/realms/simpleshop
-          jwk-set-uri: http://localhost:8080/realms/simpleshop/protocol/openid-connect/certs
+          issuer-uri: http://host.docker.internal:8080/realms/simpleshop
+          jwk-set-uri: http://host.docker.internal:8080/realms/simpleshop/protocol/openid-connect/certs
 
 keycloak:
-  url: http://localhost:8080
+  url: http://host.docker.internal:8080
   realm: simpleshop
   client-id: simpleshopapi
   client-secret: MLQur72i08U64Fi5eTM2QGjYHMEjF5dv
@@ -31,3 +33,7 @@ keycloak:
     username: admin
     password: newpassword123
     client-id: admin-cli
+
+api:
+  customer:
+    base: /api/customers

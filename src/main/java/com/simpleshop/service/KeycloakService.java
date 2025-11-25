@@ -2,7 +2,6 @@ package com.simpleshop.service;
 
 import org.keycloak.admin.client.CreatedResponseUtil;
 import org.keycloak.admin.client.Keycloak;
-import org.keycloak.admin.client.resource.UserResource;
 import org.keycloak.admin.client.resource.UsersResource;
 import org.keycloak.representations.idm.*;
 import org.springframework.beans.factory.annotation.Value;
@@ -10,7 +9,7 @@ import org.springframework.stereotype.Service;
 
 import jakarta.ws.rs.core.Response;
 
-import java.util.List;
+import java.util.*;
 
 @Service
 public class KeycloakService {
@@ -40,6 +39,7 @@ public class KeycloakService {
             user.setCredentials(List.of(cred));
 
             Response response = keycloakAdmin.realm(realm).users().create(user);
+            System.out.println("Keycloak response status: " + response.getStatus());
 
             if (response.getStatus() != 201) {
                 response.close();
@@ -65,7 +65,6 @@ public class KeycloakService {
 
             return kcId;
         } catch (Exception e) {
-            e.printStackTrace();
             return null;
         }
     }
@@ -75,38 +74,32 @@ public class KeycloakService {
             keycloakAdmin.realm(realm).users().get(keycloakId).remove();
             return true;
         } catch (Exception e) {
-            e.printStackTrace();
             return false;
         }
     }
 
-    public boolean updateKeycloakUser(String keycloakId, String username, String email, String firstName, String lastName, String newPassword) {
+
+    public void updateKeycloakUser(String keycloakId, String username, String email, String firstName, String lastName) {
         try {
-            UserResource userResource = keycloakAdmin.realm(realm).users().get(keycloakId);
+            UserRepresentation user = new UserRepresentation();
 
-            UserRepresentation rep = userResource.toRepresentation();
-            rep.setUsername(username);
-            rep.setEmail(email);
-            rep.setFirstName(firstName);
-            rep.setLastName(lastName);
-
-            userResource.update(rep);
-
-            // Update password ONLY if provided
-            if (newPassword != null && !newPassword.isBlank()) {
-                CredentialRepresentation cred = new CredentialRepresentation();
-                cred.setType(CredentialRepresentation.PASSWORD);
-                cred.setValue(newPassword);
-                cred.setTemporary(false);
-                userResource.resetPassword(cred);
+            // Only these 4 fields will be sent to Keycloak
+            if (username != null) user.setUsername(username);
+            if (firstName != null) user.setFirstName(firstName);
+            if (lastName != null) user.setLastName(lastName);
+            if (email != null) {
+                user.setEmail(email);
+                user.setEmailVerified(true);
             }
+            user.setEnabled(true);
+            keycloakAdmin.realm(realm).users().get(keycloakId).update(user);
 
-            return true;
-        } catch (Exception e) {
-            e.printStackTrace();
-            return false;
+        } catch (Exception ex) {
+            System.err.println("Keycloak update failed: " + ex.getMessage());
+            throw new RuntimeException("Keycloak update failed", ex);
         }
     }
+
 
     public void disableUser(String keycloakId) {
         UsersResource usersResource = keycloakAdmin.realm(realm).users();

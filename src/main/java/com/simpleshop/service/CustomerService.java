@@ -65,28 +65,36 @@ public class CustomerService implements CustomerServiceInterface {
     @Override
     @Transactional
     public Optional<CustomerDTO> updateCustomer(String customerId, Customer updated) {
+        try {
+            return customerRepo.findByCustomerId(customerId).map(existing -> {
 
-        return customerRepo.findByCustomerId(customerId).map(existing -> {
+                // Update DB fields
+                existing.setUserName(updated.getUserName());
+                existing.setEmail(updated.getEmail());
+                existing.setFirstName(updated.getFirstName());
+                existing.setLastName(updated.getLastName());
 
-            existing.setUserName(updated.getUserName());
-            existing.setFirstName(updated.getFirstName());
-            existing.setLastName(updated.getLastName());
-            existing.setEmail(updated.getEmail());
-            existing.setActive(updated.isActive());
+                Customer saved = customerRepo.save(existing);
 
-            boolean passwordChanged = false;
+                // Update Keycloak safely
+                keycloakService.updateKeycloakUser(
+                        saved.getKeycloakId(),
+                        saved.getUserName(),
+                        saved.getEmail(),
+                        saved.getFirstName(),
+                        saved.getLastName()
+                );
 
-            if (updated.getPassword() != null && !updated.getPassword().isBlank()) {
-                existing.setPassword(updated.getPassword());
-                passwordChanged = true;
-            }
+                // Return DTO wrapped in Optional ONCE
+                return CustomerMapper.toDTO(saved);
 
-            Customer saved = customerRepo.save(existing);
+            });
 
-            keycloakService.updateKeycloakUser(saved.getKeycloakId(), saved.getUserName(), saved.getEmail(), saved.getFirstName(), saved.getLastName(), passwordChanged ? updated.getPassword() : null);
-
-            return Optional.of(CustomerMapper.toDTO(saved)).get();
-        });
+        } catch (Exception e) {
+            System.err.println("Error updating customer: " + e.getMessage());
+            e.printStackTrace();
+            return Optional.empty();
+        }
     }
 
     @Override
@@ -160,6 +168,12 @@ public class CustomerService implements CustomerServiceInterface {
         customerRepo.save(customer);
 
         return true;
+    }
+
+    public boolean isOwner(String customerId, String requesterKcId) {
+        return customerRepo.findByCustomerId(customerId)
+                .map(c -> c.getKeycloakId().equals(requesterKcId))
+                .orElse(false);
     }
 
 }

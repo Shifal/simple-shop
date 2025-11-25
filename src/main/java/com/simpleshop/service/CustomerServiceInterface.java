@@ -22,4 +22,6 @@ public interface CustomerServiceInterface {
 
     boolean unblockCustomer(String customerId);
 
+    boolean isOwner(String customerId, String requesterKcId);
+
 }
