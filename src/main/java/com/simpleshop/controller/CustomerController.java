@@ -67,7 +67,7 @@ public class CustomerController {
     }
 
     // Public → Self-onboarding (no auth)
-    @PostMapping
+    @PostMapping("/register")
     public ResponseEntity<ApiResponse> createCustomer(@RequestBody Customer customer) {
 
         return customerService.createCustomer(customer)

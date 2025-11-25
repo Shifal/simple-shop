@@ -17,12 +17,24 @@ public class SecurityConfig {
         http
                 .csrf(csrf -> csrf.disable())
                 .authorizeHttpRequests(auth -> auth
+
+                        // Public endpoints (no authentication)
                         .requestMatchers("/auth/**").permitAll()
                         .requestMatchers("/public/**").permitAll()
-                        .requestMatchers("/api/customers").permitAll()
-                        .requestMatchers("/api/customers/**").authenticated()
+
+                        // Customer self-onboarding (registration)
+                        .requestMatchers("/api/customers/register").permitAll()
+
+                        // Admin-only endpoints
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
+
+                        // User endpoints (USER or ADMIN)
                         .requestMatchers("/api/user/**").hasAnyRole("USER", "ADMIN")
+
+                        // General customer APIs: must be authenticated
+                        .requestMatchers("/api/customers/**").authenticated()
+
+                        // All other endpoints are protected
                         .anyRequest().authenticated()
                 )
                 .oauth2ResourceServer(oauth2 -> oauth2
