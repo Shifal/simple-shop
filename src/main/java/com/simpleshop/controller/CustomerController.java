@@ -28,7 +28,9 @@ public class CustomerController {
 
     // ADMIN → Get all customers
     @GetMapping("/getAllCustomers")
-    public ResponseEntity<ApiResponse> getAllCustomers(@AuthenticationPrincipal Jwt principal) {
+    public ResponseEntity<ApiResponse> getAllCustomers(
+            @AuthenticationPrincipal Jwt principal
+    ) {
 
         if (!roleService.isAdmin(principal)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
@@ -45,7 +47,8 @@ public class CustomerController {
     @GetMapping("/{customerId}")
     public ResponseEntity<ApiResponse> getCustomerByCustomerId(
             @PathVariable String customerId,
-            @AuthenticationPrincipal Jwt principal) {
+            @AuthenticationPrincipal Jwt principal
+    ) {
 
         String requesterKcId = principal.getSubject();
         CustomerDTO dto = customerService.getCustomerSecure(customerId, requesterKcId);
@@ -66,9 +69,41 @@ public class CustomerController {
         );
     }
 
+    @GetMapping("/by-keycloak/{keycloakId}")
+    public ResponseEntity<ApiResponse> getCustomerByKeycloakId(
+            @PathVariable String keycloakId,
+            @AuthenticationPrincipal Jwt principal
+    ) {
+        // Extract logged-in user's keycloakId from access token (sub)
+        String loggedInKeycloakId = principal.getSubject();
+
+        boolean isAdmin = roleService.isAdmin(principal);
+
+        // Allow only:
+        //    - admin users
+        //    - OR customers fetching their own data
+        if (!isAdmin && !keycloakId.equals(loggedInKeycloakId)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(new ApiResponse(false, "Access denied", null));
+        }
+
+        // Fetch customer from DB
+        CustomerDTO dto = customerService.getCustomerByKeycloakId(keycloakId);
+
+        if (dto == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(new ApiResponse(false, "Customer not found", null));
+        }
+
+        return ResponseEntity.ok(new ApiResponse(true, "Customer fetched successfully", dto));
+    }
+
+
     // Public → Self-onboarding (no auth)
     @PostMapping("/register")
-    public ResponseEntity<ApiResponse> createCustomer(@RequestBody Customer customer) {
+    public ResponseEntity<ApiResponse> createCustomer(
+            @RequestBody Customer customer
+    ) {
 
         return customerService.createCustomer(customer)
                 .map(created ->
@@ -86,7 +121,8 @@ public class CustomerController {
     public ResponseEntity<ApiResponse> updateCustomer(
             @PathVariable String customerId,
             @RequestBody Customer updated,
-            @AuthenticationPrincipal Jwt principal) {
+            @AuthenticationPrincipal Jwt principal
+    ) {
 
         String requesterKcId = principal.getSubject();
 
@@ -114,7 +150,8 @@ public class CustomerController {
     @DeleteMapping("/{customerId}")
     public ResponseEntity<ApiResponse> deleteCustomer(
             @PathVariable String customerId,
-            @AuthenticationPrincipal Jwt principal) {
+            @AuthenticationPrincipal Jwt principal
+    ) {
 
         String requesterKcId = principal.getSubject();
         boolean isAdmin = roleService.isAdmin(principal);
@@ -143,7 +180,8 @@ public class CustomerController {
     @PutMapping("/block/{customerId}")
     public ResponseEntity<ApiResponse> blockCustomer(
             @PathVariable String customerId,
-            @AuthenticationPrincipal Jwt principal) {
+            @AuthenticationPrincipal Jwt principal
+    ) {
 
         if (!roleService.isAdmin(principal)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
@@ -165,7 +203,8 @@ public class CustomerController {
     @PutMapping("/unblock/{customerId}")
     public ResponseEntity<ApiResponse> unblockCustomer(
             @PathVariable String customerId,
-            @AuthenticationPrincipal Jwt principal) {
+            @AuthenticationPrincipal Jwt principal
+    ) {
 
         if (!roleService.isAdmin(principal)) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN)
