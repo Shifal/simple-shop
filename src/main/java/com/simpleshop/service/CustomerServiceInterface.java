@@ -24,4 +24,7 @@ public interface CustomerServiceInterface {
 
     boolean isOwner(String customerId, String requesterKcId);
 
+    CustomerDTO getCustomerByKeycloakId(String keycloakId);
+
+
 }

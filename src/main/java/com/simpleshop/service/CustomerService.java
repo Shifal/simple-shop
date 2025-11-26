@@ -133,6 +133,22 @@ public class CustomerService implements CustomerServiceInterface {
     }
 
     @Override
+    public CustomerDTO getCustomerByKeycloakId(String keycloakId) {
+        return customerRepo.findByKeycloakId(keycloakId)
+                .map(customer -> new CustomerDTO(
+                        customer.getId(),
+                        customer.getCustomerId(),
+                        customer.getKeycloakId(),
+                        customer.getUserName(),
+                        customer.getFirstName(),
+                        customer.getLastName(),
+                        customer.getEmail(),
+                        customer.isActive()
+                ))
+                .orElse(null);
+    }
+
+    @Override
     @Transactional
     public boolean blockCustomer(String customerId) {
 
