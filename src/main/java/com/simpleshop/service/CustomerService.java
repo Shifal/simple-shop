@@ -9,8 +9,10 @@ import jakarta.transaction.Transactional;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 @Service
@@ -37,21 +39,36 @@ public class CustomerService implements CustomerServiceInterface {
     @Transactional
     public Optional<CustomerDTO> createCustomer(Customer customer) {
         try {
-            Long nextVal = ((Number) entityManager.createNativeQuery("SELECT nextval('customer_seq')").getSingleResult()).longValue();
 
-            String prefix = "CUS-" + LocalDate.now().toString().replace("-", "");
-            String formattedNumber = String.format("%04d", nextVal);
-            String generatedCustomerId = prefix + "-" + formattedNumber;
+            // FAST: Replace sequence with UUID last digits
+            String uuid = UUID.randomUUID().toString().replace("-", "");
+            String lastDigits = uuid.substring(uuid.length() - 7).toUpperCase(); // 7 digits like your example
+
+            // Generate: CUS_120425_ABC1234
+            String prefix = "CUS_" + LocalDate.now().format(DateTimeFormatter.ofPattern("ddMMyy"));
+            String generatedCustomerId = prefix + "_" + lastDigits;
 
             customer.setCustomerId(generatedCustomerId);
 
-            String kcId = keycloakService.createKeycloakUser(customer.getUserName(), customer.getEmail(), customer.getPassword(), "USER", customer.isActive(), customer.getFirstName(), customer.getLastName());
+            // Create Keycloak user
+            String kcId = keycloakService.createKeycloakUser(
+                    customer.getUserName(),
+                    customer.getEmail(),
+                    customer.getPassword(),
+                    "USER",
+                    customer.isActive(),
+                    customer.getFirstName(),
+                    customer.getLastName()
+            );
 
             if (kcId == null) return Optional.empty();
 
             customer.setKeycloakId(kcId);
 
+            // Save Customer
             Customer saved = customerRepo.save(customer);
+
+            // Assign Role
             roleService.assignDefaultRole(saved);
 
             return Optional.of(CustomerMapper.toDTO(saved));
@@ -61,6 +78,7 @@ public class CustomerService implements CustomerServiceInterface {
             return Optional.empty();
         }
     }
+
 
     @Override
     @Transactional
