@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.GenericGenerator;
 
 @Entity
 @Table(name = "customers")
@@ -13,10 +14,12 @@ import lombok.NoArgsConstructor;
 public class Customer {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @GeneratedValue(generator = "uuid2")
+    @GenericGenerator(name = "uuid2", strategy = "org.hibernate.id.UUIDGenerator")
+    @Column(columnDefinition = "CHAR(36)")
+    private String id;
 
-    @Column(name = "customer_id", unique = true, nullable = false, updatable = false)
+    @Column(name = "customer_id", unique = true)
     private String customerId;
 
     @Column(name = "keycloak_id", unique = true)
