@@ -40,17 +40,14 @@ public class CustomerService implements CustomerServiceInterface {
     public Optional<CustomerDTO> createCustomer(Customer customer) {
         try {
 
-            // FAST: Replace sequence with UUID last digits
             String uuid = UUID.randomUUID().toString().replace("-", "");
-            String lastDigits = uuid.substring(uuid.length() - 7).toUpperCase(); // 7 digits like your example
+            String lastDigits = uuid.substring(uuid.length() - 7).toUpperCase();
 
-            // Generate: CUS_120425_ABC1234
             String prefix = "CUS_" + LocalDate.now().format(DateTimeFormatter.ofPattern("ddMMyy"));
             String generatedCustomerId = prefix + "_" + lastDigits;
 
             customer.setCustomerId(generatedCustomerId);
 
-            // Create Keycloak user
             String kcId = keycloakService.createKeycloakUser(
                     customer.getUserName(),
                     customer.getEmail(),
@@ -65,12 +62,10 @@ public class CustomerService implements CustomerServiceInterface {
 
             customer.setKeycloakId(kcId);
 
-            // Save Customer
+            System.out.println("customer................"+ customer);
             Customer saved = customerRepo.save(customer);
-
-            // Assign Role
+            System.out.println("saved................"+ saved);
             roleService.assignDefaultRole(saved);
-
             return Optional.of(CustomerMapper.toDTO(saved));
 
         } catch (Exception e) {
