@@ -46,6 +46,8 @@ public class CustomerService implements CustomerServiceInterface {
             String prefix = "CUS_" + LocalDate.now().format(DateTimeFormatter.ofPattern("ddMMyy"));
             String generatedCustomerId = prefix + "_" + lastDigits;
 
+            System.out.println("generatedCustomerId................"+ generatedCustomerId);
+
             customer.setCustomerId(generatedCustomerId);
 
             String kcId = keycloakService.createKeycloakUser(
@@ -57,9 +59,14 @@ public class CustomerService implements CustomerServiceInterface {
                     customer.getFirstName(),
                     customer.getLastName()
             );
+            System.out.println("kcId................"+ kcId);
 
-            if (kcId == null) return Optional.empty();
+            if (kcId == null) {
+                System.out.println("kcID is null");
+                return Optional.empty();
+            }
 
+            System.out.println("kcId................"+ kcId);
             customer.setKeycloakId(kcId);
 
             System.out.println("customer................"+ customer);

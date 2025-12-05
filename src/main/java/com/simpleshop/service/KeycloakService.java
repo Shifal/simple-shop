@@ -47,6 +47,8 @@ public class KeycloakService {
             }
 
             String kcId = CreatedResponseUtil.getCreatedId(response);
+            System.out.println("createKeycloakUser : kcID 1 " + kcId);
+
             response.close();
 
             // Assign Role
@@ -59,9 +61,13 @@ public class KeycloakService {
 
             GroupRepresentation userGroup = groups.stream().filter(g -> g.getName().equalsIgnoreCase("USER")).findFirst().orElse(null);
 
+            System.out.println("userGroup : userGroup" + userGroup);
+
             if (userGroup != null) {
+                System.out.println("userGroup : userGroup" + userGroup);
                 keycloakAdmin.realm(realm).users().get(kcId).joinGroup(userGroup.getId());
             }
+            System.out.println("createKeycloakUser : kcID" + kcId);
 
             return kcId;
         } catch (Exception e) {
